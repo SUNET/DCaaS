@@ -1,0 +1,6 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: onboarding
+  labels:
+    app.kubernetes.io/part-of: dcaas

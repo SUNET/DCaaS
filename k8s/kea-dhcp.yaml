@@ -1,0 +1,155 @@
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: kea-db-credentials
+  namespace: metal3
+type: Opaque
+stringData:
+  KEA_DB_HOST: "postgres.metal3.svc"
+  KEA_DB_NAME: "kea"
+  KEA_DB_USER: "kea"
+  KEA_DB_PASSWORD: "changeme"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kea-dhcp4-config
+  namespace: metal3
+data:
+  kea-dhcp4.conf: |
+    {
+      "Dhcp4": {
+        "lease-database": {
+          "type": "postgresql",
+          "host": "<KEA_DB_HOST>",
+          "name": "<KEA_DB_NAME>",
+          "user": "<KEA_DB_USER>",
+          "password": "<KEA_DB_PASSWORD>"
+        },
+        "hosts-database": {
+          "type": "postgresql",
+          "host": "<KEA_DB_HOST>",
+          "name": "<KEA_DB_NAME>",
+          "user": "<KEA_DB_USER>",
+          "password": "<KEA_DB_PASSWORD>"
+        },
+        "host-reservation-identifiers": ["hw-address"],
+        "interfaces-config": {
+          "interfaces": ["bond0.4002"],
+          "dhcp-socket-type": "raw"
+        },
+        "control-socket": {
+          "socket-type": "unix",
+          "socket-name": "/run/kea/kea4-ctrl-socket"
+        },
+        "subnet4": [
+          {
+            "id": 1,
+            "subnet": "10.0.100.0/24",
+            "pools": [],
+            "reservations-global": false,
+            "reservations-in-subnet": true,
+            "reservations-out-of-pool": true
+          }
+        ],
+        "loggers": [
+          {
+            "name": "kea-dhcp4",
+            "severity": "INFO",
+            "output_options": [
+              { "output": "stdout" }
+            ]
+          }
+        ]
+      }
+    }
+  kea-ctrl-agent.conf: |
+    {
+      "Control-agent": {
+        "http-host": "0.0.0.0",
+        "http-port": 8000,
+        "control-sockets": {
+          "dhcp4": {
+            "socket-type": "unix",
+            "socket-name": "/run/kea/kea4-ctrl-socket"
+          }
+        },
+        "loggers": [
+          {
+            "name": "kea-ctrl-agent",
+            "severity": "INFO",
+            "output_options": [
+              { "output": "stdout" }
+            ]
+          }
+        ]
+      }
+    }
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: kea-dhcp
+  namespace: metal3
+  labels:
+    app: kea-dhcp
+spec:
+  selector:
+    matchLabels:
+      app: kea-dhcp
+  template:
+    metadata:
+      labels:
+        app: kea-dhcp
+    spec:
+      hostNetwork: true
+      nodeSelector:
+        sunet.se/role: ironic-conductor
+      tolerations:
+        - key: sunet.se/ironic-conductor
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: kea-dhcp4
+          image: docker.cloudsmith.io/isc/docker/kea-dhcp4:2.6
+          command: ["kea-dhcp4", "-c", "/etc/kea/kea-dhcp4.conf"]
+          envFrom:
+            - secretRef:
+                name: kea-db-credentials
+          volumeMounts:
+            - name: kea-config
+              mountPath: /etc/kea
+            - name: kea-run
+              mountPath: /run/kea
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+        - name: kea-ctrl-agent
+          image: docker.cloudsmith.io/isc/docker/kea-ctrl-agent:2.6
+          command: ["kea-ctrl-agent", "-c", "/etc/kea/kea-ctrl-agent.conf"]
+          ports:
+            - containerPort: 8000
+              name: ctrl-api
+          volumeMounts:
+            - name: kea-config
+              mountPath: /etc/kea
+            - name: kea-run
+              mountPath: /run/kea
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+      volumes:
+        - name: kea-config
+          configMap:
+            name: kea-dhcp4-config
+        - name: kea-run
+          emptyDir: {}

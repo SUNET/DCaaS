@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#1a1a2e" />
+    <title>DCaaS Server Onboarding</title>
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="stylesheet" href="/src/styles/app.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <h1>Server Onboarding</h1>
+        <button id="nav-list" class="nav-btn" title="Server list">&#9776;</button>
+      </header>
+      <main>
+        <!-- Step 1: Barcode scanning -->
+        <section id="step-scan" class="step active">
+          <h2>Scan Server Barcodes</h2>
+          <p class="hint">Scan the two barcodes on the BMC pull-out tag (in any order).</p>
+
+          <div class="scan-fields">
+            <div class="scan-field" id="mac-field">
+              <label>BMC MAC Address</label>
+              <div class="scan-value">
+                <input
+                  type="text"
+                  id="mac-input"
+                  placeholder="Scan or type MAC..."
+                  pattern="[0-9A-Fa-f:]{12,17}"
+                />
+                <button id="scan-mac" class="btn-scan" title="Scan barcode">&#x1F4F7;</button>
+                <button id="clear-mac" class="btn-clear hidden" title="Clear">&times;</button>
+              </div>
+            </div>
+
+            <div class="scan-field" id="password-field">
+              <label>IPMI Password</label>
+              <div class="scan-value">
+                <input
+                  type="password"
+                  id="password-input"
+                  placeholder="Scan or type password..."
+                />
+                <button id="toggle-password" class="btn-toggle" title="Show/hide">&#x1F441;</button>
+                <button id="scan-password" class="btn-scan" title="Scan barcode">&#x1F4F7;</button>
+                <button id="clear-password" class="btn-clear hidden" title="Clear">&times;</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Camera view (shown during scanning) -->
+          <div id="camera-container" class="hidden">
+            <video id="camera-preview" autoplay playsinline></video>
+            <button id="cancel-scan" class="btn-secondary">Cancel</button>
+          </div>
+
+          <button id="next-to-location" class="btn-primary" disabled>
+            Next: Set Location
+          </button>
+        </section>
+
+        <!-- Step 2: Location selection -->
+        <section id="step-location" class="step">
+          <h2>Set Location</h2>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="site-select">Datacenter</label>
+              <select id="site-select">
+                <option value="">Select datacenter...</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="location-select">Rack Row</label>
+              <select id="location-select" disabled>
+                <option value="">Select rack row...</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="rack-select">Rack</label>
+              <select id="rack-select" disabled>
+                <option value="">Select rack...</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="position-input">U Position</label>
+              <input
+                type="number"
+                id="position-input"
+                min="1"
+                max="50"
+                placeholder="U position"
+              />
+            </div>
+            <div class="form-group">
+              <label for="device-type-select">Device Type</label>
+              <select id="device-type-select">
+                <option value="">Select device type...</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="device-role-select">Device Role</label>
+              <select id="device-role-select">
+                <option value="">Select device role...</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="btn-row">
+            <button id="back-to-scan" class="btn-secondary">Back</button>
+            <button id="next-to-review" class="btn-primary" disabled>
+              Next: Review
+            </button>
+          </div>
+        </section>
+
+        <!-- Step 3: Review & submit -->
+        <section id="step-review" class="step">
+          <h2>Review &amp; Submit</h2>
+
+          <dl id="review-summary" class="review-list"></dl>
+
+          <div id="submit-progress" class="hidden">
+            <div class="progress-bar">
+              <div id="progress-fill" class="progress-fill"></div>
+            </div>
+            <ul id="step-list" class="step-list"></ul>
+          </div>
+
+          <div id="submit-result" class="hidden"></div>
+
+          <div class="btn-row">
+            <button id="back-to-location" class="btn-secondary">Back</button>
+            <button id="submit-register" class="btn-primary">
+              Register Server
+            </button>
+          </div>
+        </section>
+
+        <!-- Server list panel -->
+        <section id="panel-servers" class="step">
+          <h2>Registered Servers</h2>
+          <div id="server-list" class="server-list">
+            <p class="empty-state">No servers registered yet.</p>
+          </div>
+          <button id="back-from-list" class="btn-secondary">Back</button>
+        </section>
+      </main>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
