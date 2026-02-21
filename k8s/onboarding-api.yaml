@@ -1,0 +1,145 @@
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: onboarding-api-config
+  namespace: onboarding
+type: Opaque
+stringData:
+  ONBOARDING_NETBOX_URL: "https://netbox.example.com"
+  ONBOARDING_NETBOX_TOKEN: "changeme"
+  ONBOARDING_OPENBAO_URL: "https://openbao.example.com"
+  ONBOARDING_OPENBAO_ROLE_ID: "changeme"
+  ONBOARDING_OPENBAO_SECRET_ID: "changeme"
+  ONBOARDING_OIDC_ISSUER: "https://login.example.com/realms/sunet"
+  ONBOARDING_OIDC_AUDIENCE: "onboarding-api"
+  ONBOARDING_OIDC_REQUIRED_GROUP: "onboarding-operators"
+  ONBOARDING_KEA_SERVERS: '["10.0.100.1","10.0.100.2"]'
+  ONBOARDING_KEA_PORT: "8000"
+  ONBOARDING_KEA_SUBNET_ID: "1"
+  ONBOARDING_IPMI_PREFIX: "10.0.100.0/24"
+  ONBOARDING_METAL3_NAMESPACE: "metal3"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: onboarding-api
+  namespace: onboarding
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: onboarding-api-metal3
+rules:
+  - apiGroups: ["metal3.io"]
+    resources: ["baremetalhosts"]
+    verbs: ["get", "list", "create", "update"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "create"]
+    # Restricted to metal3 namespace via RoleBinding
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: onboarding-api-metal3
+subjects:
+  - kind: ServiceAccount
+    name: onboarding-api
+    namespace: onboarding
+roleRef:
+  kind: ClusterRole
+  name: onboarding-api-metal3
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: onboarding-api
+  namespace: onboarding
+  labels:
+    app: onboarding-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: onboarding-api
+  template:
+    metadata:
+      labels:
+        app: onboarding-api
+    spec:
+      serviceAccountName: onboarding-api
+      containers:
+        - name: api
+          image: ghcr.io/sunet/dcaas-onboarding-api:latest
+          ports:
+            - containerPort: 8000
+              name: http
+          envFrom:
+            - secretRef:
+                name: onboarding-api-config
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: onboarding-api
+  namespace: onboarding
+spec:
+  selector:
+    app: onboarding-api
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: onboarding-api
+  namespace: onboarding
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  tls:
+    - hosts:
+        - onboarding.example.com
+      secretName: onboarding-api-tls
+  rules:
+    - host: onboarding.example.com
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: onboarding-api
+                port:
+                  name: http
+          - path: /healthz
+            pathType: Exact
+            backend:
+              service:
+                name: onboarding-api
+                port:
+                  name: http
