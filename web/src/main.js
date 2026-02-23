@@ -62,6 +62,13 @@ function updateScanNextButton() {
 }
 
 function handleScanResult(result) {
+  // When the user chose a specific field, only accept barcodes that match.
+  // This handles the case where both barcodes are visible in the camera —
+  // keep scanning until the right one is decoded.
+  if (scanTarget && scanTarget !== result.type) {
+    return; // wrong barcode, keep scanning
+  }
+
   if (result.type === "mac") {
     state.mac = result.value;
     macInput.value = formatMac(result.value);
