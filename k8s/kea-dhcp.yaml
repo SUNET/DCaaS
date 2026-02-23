@@ -81,6 +81,7 @@ spec:
         app: kea-dhcp
     spec:
       hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
       nodeSelector:
         ironic-conductor: enabled
       tolerations:
