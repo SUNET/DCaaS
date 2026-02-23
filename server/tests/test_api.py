@@ -59,6 +59,7 @@ class TestRegistration:
                 "position": 31,
                 "device_type": "supermicro-1u",
                 "device_role": "k8s-worker",
+                "ipmi_prefix": "10.16.28.0/24",
             },
         )
         assert resp.status_code == 201
@@ -79,6 +80,7 @@ class TestRegistration:
                 "position": 31,
                 "device_type": "supermicro-1u",
                 "device_role": "k8s-worker",
+                "ipmi_prefix": "10.16.28.0/24",
             },
         )
         assert resp.status_code == 422
@@ -106,6 +108,7 @@ class TestRegistration:
                 "position": 31,
                 "device_type": "supermicro-1u",
                 "device_role": "k8s-worker",
+                "ipmi_prefix": "10.16.28.0/24",
             },
         )
         assert resp.status_code == 500

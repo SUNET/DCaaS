@@ -26,6 +26,7 @@ class RegisterServerRequest(BaseModel):
     position: int = Field(..., ge=1, le=50, description="Rack U position (bottom U)")
     device_type: str = Field(..., description="Netbox device type slug")
     device_role: str = Field(..., description="Netbox device role slug")
+    ipmi_prefix: str = Field(..., description="IPMI subnet prefix (e.g. 10.16.28.0/24)")
 
     @field_validator("bmc_mac")
     @classmethod
@@ -112,3 +113,8 @@ class DeviceRoleRef(BaseModel):
     slug: str
     name: str
     color: str = ""
+
+
+class PrefixRef(BaseModel):
+    prefix: str
+    description: str

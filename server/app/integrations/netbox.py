@@ -124,8 +124,15 @@ class NetboxClient:
         logger.info("Created BMC interface %d on device %d", iface.id, device_id)
         return iface.id
 
-    def allocate_ipmi_ip(self, device_name: str, interface_id: int) -> str:
-        """Allocate the next available IP from the IPMI prefix and assign it to the BMC interface.
+    def get_prefixes(self) -> list[dict]:
+        """List all prefixes with role 'ipmi'."""
+        return [
+            {"prefix": str(p.prefix), "description": p.description or str(p.prefix)}
+            for p in self.api.ipam.prefixes.filter(role="ipmi")
+        ]
+
+    def allocate_ipmi_ip(self, device_name: str, interface_id: int, ipmi_prefix: str) -> str:
+        """Allocate the next available IP from the given prefix and assign it to the BMC interface.
 
         Returns the allocated IP address (without prefix length).
         """
@@ -137,9 +144,9 @@ class NetboxClient:
             logger.info("IP %s already assigned to interface %d", ip, interface_id)
             return ip
 
-        prefix = self.api.ipam.prefixes.get(prefix=settings.ipmi_prefix)
+        prefix = self.api.ipam.prefixes.get(prefix=ipmi_prefix)
         if prefix is None:
-            raise ValueError(f"IPMI prefix '{settings.ipmi_prefix}' not found in Netbox")
+            raise ValueError(f"IPMI prefix '{ipmi_prefix}' not found in Netbox")
 
         available = prefix.available_ips.create(
             {

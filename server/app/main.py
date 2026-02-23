@@ -16,6 +16,7 @@ from app.models import (
     DeviceRoleRef,
     DeviceTypeRef,
     LocationRef,
+    PrefixRef,
     RackRef,
     RegisterServerRequest,
     RegisterServerResponse,
@@ -191,4 +192,12 @@ async def ref_device_roles(_claims: dict[str, Any] = Depends(validate_token)):
     key = "device_roles"
     if key not in _ref_cache:
         _ref_cache[key] = _netbox().get_device_roles()
+    return _ref_cache[key]
+
+
+@app.get("/api/v1/reference/prefixes", response_model=list[PrefixRef])
+async def ref_prefixes(_claims: dict[str, Any] = Depends(validate_token)):
+    key = "prefixes"
+    if key not in _ref_cache:
+        _ref_cache[key] = _netbox().get_prefixes()
     return _ref_cache[key]

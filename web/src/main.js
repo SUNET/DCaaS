@@ -10,6 +10,7 @@ import {
   getRacks,
   getDeviceTypes,
   getDeviceRoles,
+  getPrefixes,
 } from "./services/api.js";
 import { startScanner, classifyBarcode, formatMac } from "./services/scanner.js";
 
@@ -23,6 +24,7 @@ const state = {
   position: null,
   deviceType: "",
   deviceRole: "",
+  ipmiPrefix: "",
 };
 
 // Remember last-used location across scans
@@ -155,6 +157,7 @@ const rackSelect = $("#rack-select");
 const positionInput = $("#position-input");
 const deviceTypeSelect = $("#device-type-select");
 const deviceRoleSelect = $("#device-role-select");
+const prefixSelect = $("#prefix-select");
 
 function updateLocationNextButton() {
   const ready =
@@ -163,7 +166,8 @@ function updateLocationNextButton() {
     state.rack &&
     state.position &&
     state.deviceType &&
-    state.deviceRole;
+    state.deviceRole &&
+    state.ipmiPrefix;
   $("#next-to-review").disabled = !ready;
 }
 
@@ -269,6 +273,21 @@ async function loadDeviceRoles() {
   }
 }
 
+async function loadPrefixes() {
+  try {
+    const prefixes = await getPrefixes();
+    prefixSelect.innerHTML = '<option value="">Select IPMI prefix...</option>';
+    prefixes.forEach((p) => {
+      const opt = document.createElement("option");
+      opt.value = p.prefix;
+      opt.textContent = `${p.prefix} — ${p.description}`;
+      prefixSelect.appendChild(opt);
+    });
+  } catch (err) {
+    console.error("Failed to load prefixes:", err);
+  }
+}
+
 siteSelect.addEventListener("change", async () => {
   state.site = siteSelect.value;
   state.location = "";
@@ -324,6 +343,11 @@ deviceRoleSelect.addEventListener("change", () => {
   updateLocationNextButton();
 });
 
+prefixSelect.addEventListener("change", () => {
+  state.ipmiPrefix = prefixSelect.value;
+  updateLocationNextButton();
+});
+
 // ── Step 3: Review & Submit ────────────────────────────────────────────
 function buildReview() {
   const dl = $("#review-summary");
@@ -336,6 +360,7 @@ function buildReview() {
     ["U Position", state.position],
     ["Device Type", state.deviceType],
     ["Device Role", state.deviceRole],
+    ["IPMI Prefix", state.ipmiPrefix],
     ["Device Name", `${state.location}-${state.rack.toLowerCase()}u${state.position}`],
   ];
 
@@ -378,6 +403,7 @@ async function submitRegistration() {
       position: state.position,
       device_type: state.deviceType,
       device_role: state.deviceRole,
+      ipmi_prefix: state.ipmiPrefix,
     });
 
     // Update step indicators from response
@@ -449,6 +475,7 @@ $("#next-to-location").addEventListener("click", () => {
   loadSites();
   loadDeviceTypes();
   loadDeviceRoles();
+  loadPrefixes();
 });
 
 $("#back-to-scan").addEventListener("click", () => showStep("scan"));

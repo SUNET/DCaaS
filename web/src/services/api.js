@@ -60,3 +60,7 @@ export function getDeviceTypes() {
 export function getDeviceRoles() {
   return request("GET", "/reference/device-roles");
 }
+
+export function getPrefixes() {
+  return request("GET", "/reference/prefixes");
+}

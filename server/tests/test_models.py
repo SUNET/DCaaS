@@ -17,6 +17,7 @@ class TestRegisterServerRequest:
             position=31,
             device_type="supermicro-1u",
             device_role="k8s-worker",
+            ipmi_prefix="10.16.28.0/24",
         )
         assert req.bmc_mac == "3CECEFA19CE8"
 
@@ -30,6 +31,7 @@ class TestRegisterServerRequest:
             position=31,
             device_type="supermicro-1u",
             device_role="k8s-worker",
+            ipmi_prefix="10.16.28.0/24",
         )
         assert req.bmc_mac == "3CECEFA19CE8"
 
@@ -43,6 +45,7 @@ class TestRegisterServerRequest:
             position=1,
             device_type="supermicro-1u",
             device_role="k8s-worker",
+            ipmi_prefix="10.16.28.0/24",
         )
         assert req.bmc_mac == "3CECEFA19CE8"
 
@@ -108,6 +111,7 @@ class TestRegisterServerRequest:
             position=31,
             device_type="supermicro-1u",
             device_role="k8s-worker",
+            ipmi_prefix="10.16.28.0/24",
         )
         assert req.formatted_mac() == "3c:ec:ef:a1:9c:e8"
 
@@ -121,5 +125,6 @@ class TestRegisterServerRequest:
             position=45,
             device_type="supermicro-1u",
             device_role="k8s-worker",
+            ipmi_prefix="10.16.28.0/24",
         )
         assert req.device_name() == "dcoa-ra07u45"
