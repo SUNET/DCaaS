@@ -10,7 +10,7 @@ from app.main import app
 
 
 async def _fake_auth():
-    return {"sub": "test-user", "groups": ["onboarding-operators"]}
+    return {"sub": "test-user"}
 
 
 @pytest.fixture

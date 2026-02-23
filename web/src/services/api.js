@@ -1,27 +1,24 @@
 /**
  * API client for the onboarding server.
+ *
+ * Authentication is handled via session cookies (set by the BFF auth flow).
  */
 
 const BASE = "/api/v1";
 
-/** Get the auth token from session storage. */
-function authHeaders() {
-  const token = sessionStorage.getItem("auth_token");
-  if (token) {
-    return { Authorization: `Bearer ${token}` };
-  }
-  return {};
-}
-
 async function request(method, path, body) {
   const opts = {
     method,
-    headers: { "Content-Type": "application/json", ...authHeaders() },
+    headers: { "Content-Type": "application/json" },
   };
   if (body !== undefined) {
     opts.body = JSON.stringify(body);
   }
   const resp = await fetch(`${BASE}${path}`, opts);
+  if (resp.status === 401) {
+    window.location.href = "/auth/login";
+    return;
+  }
   if (!resp.ok) {
     const detail = await resp.json().catch(() => ({}));
     throw new Error(detail.detail?.message || detail.detail || resp.statusText);

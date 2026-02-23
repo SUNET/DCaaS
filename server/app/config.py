@@ -11,7 +11,15 @@ class Settings(BaseSettings):
     # OIDC authentication
     oidc_issuer: str = ""
     oidc_audience: str = "onboarding-api"
-    oidc_required_group: str = "onboarding-operators"
+
+    # OIDC BFF (authorization-code flow)
+    oidc_client_id: str = ""
+    oidc_client_secret: str = ""
+    oidc_redirect_uri: str = ""
+    session_secret: str = ""
+
+    # Allowed users (comma-separated list of OIDC 'sub' values)
+    allowed_users: list[str] = []
 
     # Netbox
     netbox_url: str = ""

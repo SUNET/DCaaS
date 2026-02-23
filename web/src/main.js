@@ -38,6 +38,7 @@ let scanTarget = null; // "mac" | "password"
 // ── DOM refs ───────────────────────────────────────────────────────────
 const $ = (sel) => document.querySelector(sel);
 const steps = {
+  login: $("#login-screen"),
   scan: $("#step-scan"),
   location: $("#step-location"),
   review: $("#step-review"),
@@ -461,5 +462,31 @@ $("#nav-list").addEventListener("click", () => {
 
 $("#back-from-list").addEventListener("click", () => showStep("scan"));
 
+// ── Auth ────────────────────────────────────────────────────────────────
+const userNameEl = $("#user-name");
+const logoutBtn = $("#logout-btn");
+
+logoutBtn.addEventListener("click", async () => {
+  await fetch("/auth/logout", { method: "POST" });
+  window.location.reload();
+});
+
+async function checkAuth() {
+  try {
+    const resp = await fetch("/auth/userinfo");
+    if (resp.ok) {
+      const user = await resp.json();
+      userNameEl.textContent = user.name || user.sub || "";
+      userNameEl.classList.remove("hidden");
+      logoutBtn.classList.remove("hidden");
+      showStep("scan");
+      return;
+    }
+  } catch {
+    // network error — fall through to login screen
+  }
+  showStep("login");
+}
+
 // ── Init ───────────────────────────────────────────────────────────────
-showStep("scan");
+checkAuth();
