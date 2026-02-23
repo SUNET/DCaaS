@@ -19,6 +19,7 @@ extra_jobs:
     docker_tags:
       - "0.1.0"
       - "latest"
+    downstream: []
 
   # PWA web frontend (nginx)
   - name: dcaas-web
@@ -29,3 +30,4 @@ extra_jobs:
     docker_tags:
       - "0.1.0"
       - "latest"
+    downstream: []
