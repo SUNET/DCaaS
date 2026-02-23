@@ -115,11 +115,11 @@ class TestRegisterServerRequest:
         req = RegisterServerRequest(
             bmc_mac="3CECEFA19CE8",
             ipmi_password="test",
-            site="dcoa",
-            location="rb06",
-            rack="rb06",
-            position=31,
+            site="sunetdco",
+            location="dcoa",
+            rack="RA07",
+            position=45,
             device_type="supermicro-1u",
             device_role="k8s-worker",
         )
-        assert req.device_name() == "dcoa-rb06u31"
+        assert req.device_name() == "dcoa-ra07u45"

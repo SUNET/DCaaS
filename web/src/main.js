@@ -336,7 +336,7 @@ function buildReview() {
     ["U Position", state.position],
     ["Device Type", state.deviceType],
     ["Device Role", state.deviceRole],
-    ["Device Name", `${state.site}-${state.rack}u${state.position}`],
+    ["Device Name", `${state.location}-${state.rack.toLowerCase()}u${state.position}`],
   ];
 
   dl.innerHTML = items

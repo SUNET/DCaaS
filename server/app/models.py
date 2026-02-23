@@ -41,8 +41,8 @@ class RegisterServerRequest(BaseModel):
         return ":".join(mac[i : i + 2] for i in range(0, 12, 2)).lower()
 
     def device_name(self) -> str:
-        """Generate device name from location: {site}-{rack}u{position}."""
-        return f"{self.site}-{self.rack}u{self.position}"
+        """Generate device name: {rack_row}-{rack}u{position}, e.g. dcoa-ra07u45."""
+        return f"{self.location}-{self.rack.lower()}u{self.position}"
 
 
 class RegistrationSteps(BaseModel):
