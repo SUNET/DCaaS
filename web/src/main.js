@@ -470,6 +470,7 @@ let allServers = [];
 const filterSite = $("#filter-site");
 const filterLocation = $("#filter-location");
 const filterDeviceType = $("#filter-device-type");
+const filterDeviceRole = $("#filter-device-role");
 
 function populateFilterOptions() {
   const sites = [...new Set(allServers.map((s) => s.site).filter(Boolean))].sort();
@@ -482,6 +483,17 @@ function populateFilterOptions() {
     locations.map((v) => `<option value="${v}">${v}</option>`).join("");
   filterDeviceType.innerHTML = '<option value="">All device types</option>' +
     types.map((v) => `<option value="${v}">${v}</option>`).join("");
+
+  const roles = [...new Set(allServers.map((s) => s.device_role).filter(Boolean))].sort();
+  const currentRole = filterDeviceRole.value;
+  filterDeviceRole.innerHTML = '<option value="">All roles</option>' +
+    roles.map((v) => `<option value="${v}">${v}</option>`).join("");
+  // Default to "Physical server" on first load
+  if (!currentRole && roles.includes("Physical server")) {
+    filterDeviceRole.value = "Physical server";
+  } else {
+    filterDeviceRole.value = currentRole;
+  }
 }
 
 function renderServerList() {
@@ -490,9 +502,10 @@ function renderServerList() {
   const sf = filterSite.value;
   const lf = filterLocation.value;
   const tf = filterDeviceType.value;
+  const rf = filterDeviceRole.value;
 
   const filtered = allServers.filter(
-    (s) => (!sf || s.site === sf) && (!lf || s.location === lf) && (!tf || s.device_type === tf)
+    (s) => (!sf || s.site === sf) && (!lf || s.location === lf) && (!tf || s.device_type === tf) && (!rf || s.device_role === rf)
   );
 
   countEl.textContent = `${filtered.length} of ${allServers.length} servers`;
@@ -518,6 +531,7 @@ function renderServerList() {
 filterSite.addEventListener("change", renderServerList);
 filterLocation.addEventListener("change", renderServerList);
 filterDeviceType.addEventListener("change", renderServerList);
+filterDeviceRole.addEventListener("change", renderServerList);
 
 async function loadServerList() {
   const container = $("#server-list");
