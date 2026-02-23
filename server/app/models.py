@@ -79,13 +79,15 @@ class ServerStatusResponse(BaseModel):
 
 
 class ServerListItem(BaseModel):
-    id: str
-    device_name: str
-    status: DeviceStatus
+    name: str
+    status: str
     site: str
+    location: str = ""
     rack: str
-    position: int
-    created_at: datetime
+    position: int | None = None
+    device_type: str = ""
+    device_role: str = ""
+    created: str | None = None
 
 
 class SiteRef(BaseModel):

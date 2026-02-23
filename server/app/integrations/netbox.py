@@ -51,6 +51,25 @@ class NetboxClient:
             for dr in self.api.dcim.device_roles.all()
         ]
 
+    def get_devices(self) -> list[dict]:
+        """List all devices, most recently created first."""
+        devices = self.api.dcim.devices.all()
+        result = []
+        for d in devices:
+            result.append({
+                "name": d.name,
+                "status": d.status.value if d.status else "unknown",
+                "site": d.site.slug if d.site else "",
+                "location": d.location.slug if d.location else "",
+                "rack": d.rack.name if d.rack else "",
+                "position": int(d.position) if d.position else None,
+                "device_type": f"{d.device_type.manufacturer.name} {d.device_type.model}" if d.device_type else "",
+                "device_role": d.role.name if d.role else "",
+                "created": str(d.created) if d.created else None,
+            })
+        result.sort(key=lambda x: x["created"] or "", reverse=True)
+        return result
+
     def device_exists(self, name: str) -> int | None:
         """Check if a device with this name already exists. Returns its ID or None."""
         devices = list(self.api.dcim.devices.filter(name=name))

@@ -115,10 +115,31 @@ class TestRegistration:
 
 
 class TestServerList:
-    def test_list_empty(self, client):
+    @patch("app.main._netbox")
+    def test_list_from_netbox(self, mock_netbox, client):
+        mock_netbox.return_value.get_devices.return_value = [
+            {
+                "name": "dcoa-ra07u45",
+                "status": "staged",
+                "site": "sunetdco",
+                "location": "dcoa",
+                "rack": "RA07",
+                "position": 45,
+                "device_type": "Supermicro 1U",
+                "device_role": "k8s-worker",
+                "created": "2026-02-23T12:00:00Z",
+            }
+        ]
+        # Clear cache so the mock is used
+        from app.main import _ref_cache
+        _ref_cache.pop("devices", None)
+
         resp = client.get("/api/v1/servers")
         assert resp.status_code == 200
-        assert resp.json() == []
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["name"] == "dcoa-ra07u45"
+        assert data[0]["status"] == "staged"
 
 
 class TestServerStatus:

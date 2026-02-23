@@ -477,10 +477,11 @@ async function loadServerList() {
       .map(
         (s) => `
       <div class="server-card">
-        <h3>${s.device_name}</h3>
+        <h3>${s.name}</h3>
         <span class="status-badge ${s.status}">${s.status}</span>
-        <p class="meta">${s.site} / ${s.rack} / U${s.position}
-          &mdash; ${new Date(s.created_at).toLocaleString()}</p>
+        <p class="meta">${s.location} / ${s.rack} / U${s.position || "?"}
+          &mdash; ${s.device_role}
+          &mdash; ${s.created ? new Date(s.created).toLocaleDateString() : ""}</p>
       </div>`
       )
       .join("");

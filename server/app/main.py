@@ -24,7 +24,7 @@ from app.models import (
     ServerStatusResponse,
     SiteRef,
 )
-from app.workflow import get_server_status, list_servers, register_server
+from app.workflow import get_server_status, register_server
 
 logging.basicConfig(
     level=logging.DEBUG if settings.debug else logging.INFO,
@@ -110,19 +110,11 @@ async def register(
 async def servers_list(
     _claims: dict[str, Any] = Depends(validate_token),
 ):
-    """List recently registered servers."""
-    return [
-        ServerListItem(
-            id=s.id,
-            device_name=s.device_name,
-            status=s.status,
-            site=s.site,
-            rack=s.rack,
-            position=s.position,
-            created_at=s.created_at,
-        )
-        for s in list_servers()
-    ]
+    """List devices from Netbox."""
+    key = "devices"
+    if key not in _ref_cache:
+        _ref_cache[key] = _netbox().get_devices()
+    return _ref_cache[key]
 
 
 @app.get("/api/v1/servers/{server_id}/status", response_model=ServerStatusResponse)
