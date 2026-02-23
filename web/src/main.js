@@ -719,7 +719,22 @@ $("#back-to-location").addEventListener("click", () => showStep("location"));
 
 $("#submit-register").addEventListener("click", submitRegistration);
 
+// ── Nav menu ──
+const navMenu = $("#nav-menu");
+
+$("#nav-menu-toggle").addEventListener("click", () => {
+  navMenu.classList.toggle("hidden");
+});
+
+// Close menu when clicking outside
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".nav-menu-wrap")) {
+    navMenu.classList.add("hidden");
+  }
+});
+
 $("#nav-list").addEventListener("click", () => {
+  navMenu.classList.add("hidden");
   loadServerList();
   showStep("servers");
 });
@@ -727,6 +742,7 @@ $("#nav-list").addEventListener("click", () => {
 $("#back-from-list").addEventListener("click", () => showStep("scan"));
 
 $("#nav-import").addEventListener("click", () => {
+  navMenu.classList.add("hidden");
   resetImportPanel();
   showStep("import");
 });
@@ -750,7 +766,6 @@ async function checkAuth() {
       userNameEl.textContent = user.name || user.sub || "";
       userNameEl.classList.remove("hidden");
       logoutBtn.classList.remove("hidden");
-      $("#nav-import").classList.remove("hidden");
       showStep("scan");
       return;
     }

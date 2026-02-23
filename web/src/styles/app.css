@@ -77,6 +77,40 @@ header h1 {
   padding: 4px 8px;
 }
 
+.nav-menu-wrap {
+  position: relative;
+}
+
+.nav-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  min-width: 180px;
+  z-index: 20;
+  overflow: hidden;
+}
+
+.nav-menu-item {
+  display: block;
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  background: none;
+  text-align: left;
+  font-size: 0.95rem;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.nav-menu-item:hover {
+  background: var(--bg);
+}
+
 main {
   max-width: 600px;
   margin: 0 auto;

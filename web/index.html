@@ -18,8 +18,13 @@
         <div class="header-right">
           <span id="user-name" class="user-name hidden"></span>
           <button id="logout-btn" class="nav-btn hidden" title="Sign out">&#x2715;</button>
-          <button id="nav-import" class="nav-btn hidden" title="Bulk import">&#x21E7;</button>
-          <button id="nav-list" class="nav-btn" title="Server list">&#9776;</button>
+          <div class="nav-menu-wrap">
+            <button id="nav-menu-toggle" class="nav-btn" title="Menu">&#9776;</button>
+            <div id="nav-menu" class="nav-menu hidden">
+              <button id="nav-list" class="nav-menu-item">Registered Servers</button>
+              <button id="nav-import" class="nav-menu-item">Import Servers</button>
+            </div>
+          </div>
         </div>
       </header>
       <main>
