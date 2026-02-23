@@ -80,9 +80,8 @@ async def callback(request: Request, code: str, state: str):
                 "grant_type": "authorization_code",
                 "code": code,
                 "redirect_uri": settings.oidc_redirect_uri,
-                "client_id": settings.oidc_client_id,
-                "client_secret": settings.oidc_client_secret,
             },
+            auth=(settings.oidc_client_id, settings.oidc_client_secret),
         )
 
     if resp.status_code != 200:
