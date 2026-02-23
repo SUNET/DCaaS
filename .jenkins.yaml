@@ -3,6 +3,11 @@
 clean_workspace: true
 triggers:
   cron: "@daily"
+script:
+  - echo "Building DCaaS images"
+downstream:
+  - dcaas-api
+  - dcaas-web
 
 extra_jobs:
   # FastAPI onboarding API server
