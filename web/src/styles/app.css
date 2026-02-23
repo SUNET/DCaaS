@@ -340,6 +340,12 @@ h2 {
   margin-bottom: 20px;
 }
 
+.result-warnings {
+  margin-top: 8px;
+  color: var(--warning);
+  font-size: 0.9rem;
+}
+
 .result-error {
   background: #fef2f2;
   border: 2px solid var(--error);

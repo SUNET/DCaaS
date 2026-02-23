@@ -42,12 +42,13 @@ async def register_server(req: RegisterServerRequest) -> RegisterServerResponse:
     response = RegisterServerResponse(device_name=device_name)
     netbox_id: int | None = None
     ipmi_ip: str | None = None
+    warnings: list[str] = []
 
     try:
         # Step 1+2: Create device and BMC interface in Netbox
         netbox = NetboxClient()
 
-        netbox_id = netbox.create_device(
+        netbox_id, device_created = netbox.create_device(
             name=device_name,
             site=req.site,
             location=req.location,
@@ -57,6 +58,8 @@ async def register_server(req: RegisterServerRequest) -> RegisterServerResponse:
             device_role=req.device_role,
         )
         steps.netbox_device_created = True
+        if not device_created:
+            warnings.append(f"Device already exists in Netbox (ID {netbox_id}), skipping creation")
 
         interface_id = netbox.create_bmc_interface(netbox_id, formatted_mac)
         steps.netbox_interface_created = True
@@ -102,6 +105,7 @@ async def register_server(req: RegisterServerRequest) -> RegisterServerResponse:
         response.netbox_id = netbox_id
         response.ipmi_ip = ipmi_ip
         response.steps = steps
+        response.warnings = warnings
 
         logger.info("Successfully registered server %s", device_name)
 

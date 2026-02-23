@@ -60,6 +60,7 @@ class RegisterServerResponse(BaseModel):
     netbox_id: int | None = None
     ipmi_ip: str | None = None
     steps: RegistrationSteps = Field(default_factory=RegistrationSteps)
+    warnings: list[str] = Field(default_factory=list)
     error: str | None = None
 
 

@@ -67,16 +67,30 @@ class NetboxClient:
         position: int,
         device_type: str,
         device_role: str,
-    ) -> int:
-        """Create a device in Netbox. Returns the device ID."""
+    ) -> tuple[int, bool]:
+        """Create a device in Netbox. Returns (device_id, created).
+
+        If a device with the same name already exists, returns its ID.
+        If the rack position is already occupied, returns the occupying device's ID.
+        In both cases ``created`` is False.
+        """
         existing_id = self.device_exists(name)
         if existing_id is not None:
             logger.info("Device %s already exists with ID %d, skipping creation", name, existing_id)
-            return existing_id
+            return existing_id, False
 
         rack_obj = self.api.dcim.racks.get(name=rack, location=location)
         if rack_obj is None:
             raise ValueError(f"Rack '{rack}' not found in location '{location}'")
+
+        # Check if the position is already occupied
+        occupant = list(self.api.dcim.devices.filter(rack_id=rack_obj.id, position=position))
+        if occupant:
+            logger.warning(
+                "Position U%d in rack %s already occupied by %s (ID %d), skipping creation",
+                position, rack, occupant[0].name, occupant[0].id,
+            )
+            return occupant[0].id, False
 
         device = self.api.dcim.devices.create(
             name=name,
@@ -90,7 +104,7 @@ class NetboxClient:
             status="planned",
         )
         logger.info("Created device %s with ID %d", name, device.id)
-        return device.id
+        return device.id, True
 
     def create_bmc_interface(self, device_id: int, mac_address: str) -> int:
         """Create a BMC interface on a device. Returns the interface ID."""

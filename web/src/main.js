@@ -397,11 +397,15 @@ async function submitRegistration() {
 
     resultDiv.classList.remove("hidden");
     resultDiv.className = "result-success";
+    const warningsHtml = result.warnings && result.warnings.length
+      ? `<div class="result-warnings">${result.warnings.map((w) => `<p>&#x26A0; ${w}</p>`).join("")}</div>`
+      : "";
     resultDiv.innerHTML = `
       <strong>Server registered successfully</strong><br />
       Device: <code>${result.device_name}</code><br />
       IPMI IP: <code>${result.ipmi_ip || "N/A"}</code><br />
       Netbox ID: <code>${result.netbox_id || "N/A"}</code>
+      ${warningsHtml}
     `;
   } catch (err) {
     resultDiv.classList.remove("hidden");
