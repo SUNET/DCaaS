@@ -120,3 +120,50 @@ class DeviceRoleRef(BaseModel):
 class PrefixRef(BaseModel):
     prefix: str
     description: str
+
+
+class ImportServerItem(BaseModel):
+    device_name: str
+    bmc_mac: str = Field(..., description="BMC MAC address as 12 hex characters")
+    ipmi_password: str = Field(..., min_length=1, description="IPMI/BMC password")
+    ipmi_ip: str | None = None
+    site: str | None = None
+    location: str | None = None
+    rack: str | None = None
+    position: int | None = None
+    device_type: str | None = None
+    device_role: str | None = None
+    ipmi_prefix: str | None = None
+
+    @field_validator("bmc_mac")
+    @classmethod
+    def validate_mac(cls, v: str) -> str:
+        cleaned = v.replace(":", "").replace("-", "").upper()
+        if not re.match(r"^[0-9A-F]{12}$", cleaned):
+            raise ValueError("BMC MAC must be 12 hex characters")
+        return cleaned
+
+    def formatted_mac(self) -> str:
+        """Return MAC in colon-separated format."""
+        mac = self.bmc_mac
+        return ":".join(mac[i : i + 2] for i in range(0, 12, 2)).lower()
+
+    def has_netbox_fields(self) -> bool:
+        """Check if all Netbox fields are provided."""
+        return all([
+            self.site,
+            self.location,
+            self.rack,
+            self.position is not None,
+            self.device_type,
+            self.device_role,
+        ])
+
+
+class ImportResultItem(BaseModel):
+    device_name: str
+    status: str  # "ok" or "failed"
+    steps: RegistrationSteps
+    warnings: list[str] = Field(default_factory=list)
+    error: str | None = None
+    ipmi_ip: str | None = None

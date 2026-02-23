@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.models import RegisterServerRequest
+from app.models import ImportServerItem, RegisterServerRequest
 
 
 class TestRegisterServerRequest:
@@ -128,3 +128,72 @@ class TestRegisterServerRequest:
             ipmi_prefix="10.16.28.0/24",
         )
         assert req.device_name() == "dcoa-ra07u45"
+
+
+class TestImportServerItem:
+    def test_minimal_fields(self):
+        item = ImportServerItem(
+            device_name="dcoa-ra07u45",
+            bmc_mac="3CECEFA19CE8",
+            ipmi_password="secret",
+        )
+        assert item.bmc_mac == "3CECEFA19CE8"
+        assert item.ipmi_ip is None
+        assert not item.has_netbox_fields()
+
+    def test_mac_validation(self):
+        item = ImportServerItem(
+            device_name="test",
+            bmc_mac="3c:ec:ef:a1:9c:e8",
+            ipmi_password="secret",
+        )
+        assert item.bmc_mac == "3CECEFA19CE8"
+
+    def test_invalid_mac_rejected(self):
+        with pytest.raises(ValidationError, match="12 hex characters"):
+            ImportServerItem(
+                device_name="test",
+                bmc_mac="invalid",
+                ipmi_password="secret",
+            )
+
+    def test_empty_password_rejected(self):
+        with pytest.raises(ValidationError):
+            ImportServerItem(
+                device_name="test",
+                bmc_mac="3CECEFA19CE8",
+                ipmi_password="",
+            )
+
+    def test_has_netbox_fields_true(self):
+        item = ImportServerItem(
+            device_name="dcoa-ra07u44",
+            bmc_mac="AABBCCDDEEFF",
+            ipmi_password="pass",
+            site="sunetdco",
+            location="dcoa",
+            rack="RA07",
+            position=44,
+            device_type="supermicro-1u",
+            device_role="physical-server",
+        )
+        assert item.has_netbox_fields()
+
+    def test_has_netbox_fields_partial(self):
+        item = ImportServerItem(
+            device_name="dcoa-ra07u44",
+            bmc_mac="AABBCCDDEEFF",
+            ipmi_password="pass",
+            site="sunetdco",
+            location="dcoa",
+            # missing rack, position, device_type, device_role
+        )
+        assert not item.has_netbox_fields()
+
+    def test_formatted_mac(self):
+        item = ImportServerItem(
+            device_name="test",
+            bmc_mac="3CECEFA19CE8",
+            ipmi_password="secret",
+        )
+        assert item.formatted_mac() == "3c:ec:ef:a1:9c:e8"

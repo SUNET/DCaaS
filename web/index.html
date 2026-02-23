@@ -18,6 +18,7 @@
         <div class="header-right">
           <span id="user-name" class="user-name hidden"></span>
           <button id="logout-btn" class="nav-btn hidden" title="Sign out">&#x2715;</button>
+          <button id="nav-import" class="nav-btn hidden" title="Bulk import">&#x21E7;</button>
           <button id="nav-list" class="nav-btn" title="Server list">&#9776;</button>
         </div>
       </header>
@@ -159,6 +160,49 @@
               Register Server
             </button>
           </div>
+        </section>
+
+        <!-- Bulk import panel -->
+        <section id="panel-import" class="step">
+          <h2>Bulk Import Servers</h2>
+          <p class="hint">Upload a JSON file with server data to import existing servers into OpenBao, Kea, and Metal3.</p>
+
+          <div class="import-upload">
+            <label for="import-file" class="btn-secondary import-file-label">
+              Choose JSON file...
+            </label>
+            <input type="file" id="import-file" accept=".json" class="hidden" />
+            <span id="import-file-name" class="import-file-name">No file selected</span>
+          </div>
+
+          <div id="import-preview" class="hidden">
+            <h3 id="import-count"></h3>
+            <div id="import-table-wrap" class="import-table-wrap">
+              <table class="import-table">
+                <thead>
+                  <tr>
+                    <th>Device Name</th>
+                    <th>BMC MAC</th>
+                    <th>IPMI IP</th>
+                    <th>Netbox</th>
+                  </tr>
+                </thead>
+                <tbody id="import-table-body"></tbody>
+              </table>
+            </div>
+            <button id="import-submit" class="btn-primary">Import Servers</button>
+          </div>
+
+          <div id="import-progress" class="hidden">
+            <div class="progress-bar">
+              <div id="import-progress-fill" class="progress-fill"></div>
+            </div>
+            <p id="import-progress-text" class="hint"></p>
+          </div>
+
+          <div id="import-results" class="hidden"></div>
+
+          <button id="back-from-import" class="btn-secondary" style="margin-top:16px">Back</button>
         </section>
 
         <!-- Server list panel -->

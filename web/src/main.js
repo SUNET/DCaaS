@@ -4,6 +4,7 @@
 
 import {
   registerServer,
+  importServers,
   listServers,
   getSites,
   getLocations,
@@ -44,6 +45,7 @@ const steps = {
   scan: $("#step-scan"),
   location: $("#step-location"),
   review: $("#step-review"),
+  import: $("#panel-import"),
   servers: $("#panel-servers"),
 };
 
@@ -544,6 +546,155 @@ async function loadServerList() {
   }
 }
 
+// ── Bulk Import ─────────────────────────────────────────────────────────
+let importData = null;
+
+const importFileInput = $("#import-file");
+const importFileName = $("#import-file-name");
+const importPreview = $("#import-preview");
+const importCount = $("#import-count");
+const importTableBody = $("#import-table-body");
+const importSubmitBtn = $("#import-submit");
+const importProgress = $("#import-progress");
+const importProgressFill = $("#import-progress-fill");
+const importProgressText = $("#import-progress-text");
+const importResults = $("#import-results");
+
+function resetImportPanel() {
+  importData = null;
+  importFileInput.value = "";
+  importFileName.textContent = "No file selected";
+  importPreview.classList.add("hidden");
+  importProgress.classList.add("hidden");
+  importResults.classList.add("hidden");
+  importResults.innerHTML = "";
+}
+
+function formatMacForDisplay(mac) {
+  const clean = mac.replace(/[:\- ]/g, "").toUpperCase();
+  return clean.replace(/(.{2})(?=.)/g, "$1:");
+}
+
+importFileInput.addEventListener("change", () => {
+  const file = importFileInput.files[0];
+  if (!file) return;
+
+  importFileName.textContent = file.name;
+  importResults.classList.add("hidden");
+  importProgress.classList.add("hidden");
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const parsed = JSON.parse(e.target.result);
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        throw new Error("File must contain a non-empty JSON array");
+      }
+      // Validate required fields
+      for (const [i, item] of parsed.entries()) {
+        if (!item.device_name || !item.bmc_mac || !item.ipmi_password) {
+          throw new Error(
+            `Item ${i + 1} missing required fields (device_name, bmc_mac, ipmi_password)`
+          );
+        }
+      }
+      importData = parsed;
+      importCount.textContent = `${parsed.length} server${parsed.length !== 1 ? "s" : ""} to import`;
+      importTableBody.innerHTML = parsed
+        .map((s) => {
+          const hasNetbox = s.site && s.location && s.rack && s.position != null && s.device_type && s.device_role;
+          return `<tr>
+            <td>${s.device_name}</td>
+            <td><code>${formatMacForDisplay(s.bmc_mac)}</code></td>
+            <td>${s.ipmi_ip || (s.ipmi_prefix ? "allocate" : "\u2014")}</td>
+            <td>${hasNetbox ? "yes" : "skip"}</td>
+          </tr>`;
+        })
+        .join("");
+      importPreview.classList.remove("hidden");
+    } catch (err) {
+      importData = null;
+      importPreview.classList.add("hidden");
+      importResults.classList.remove("hidden");
+      importResults.className = "result-error";
+      importResults.innerHTML = `<strong>Invalid file</strong><br />${err.message}`;
+    }
+  };
+  reader.readAsText(file);
+});
+
+importSubmitBtn.addEventListener("click", async () => {
+  if (!importData) return;
+
+  importSubmitBtn.disabled = true;
+  importProgress.classList.remove("hidden");
+  importResults.classList.add("hidden");
+  importProgressFill.style.width = "0%";
+  importProgressFill.style.background = "";
+  importProgressText.textContent = `Importing ${importData.length} servers...`;
+
+  try {
+    const results = await importServers(importData);
+    importProgressFill.style.width = "100%";
+
+    const ok = results.filter((r) => r.status === "ok").length;
+    const failed = results.filter((r) => r.status === "failed").length;
+
+    if (failed > 0) {
+      importProgressFill.style.background = "var(--warning)";
+    }
+
+    importProgressText.textContent = `Done: ${ok} succeeded, ${failed} failed`;
+
+    importResults.classList.remove("hidden");
+    importResults.className = "";
+    importResults.innerHTML = results
+      .map((r) => {
+        const isOk = r.status === "ok";
+        const cssClass = isOk ? "import-result-ok" : "import-result-fail";
+        const icon = isOk ? "\u2714" : "\u2718";
+
+        const stepLabels = [
+          ["netbox_device_created", "Netbox device"],
+          ["netbox_interface_created", "Netbox interface"],
+          ["secret_stored", "OpenBao secret"],
+          ["ipmi_ip_assigned", "Kea DHCP"],
+          ["ironic_node_created", "Metal3 BMH"],
+        ];
+        const stepBadges = stepLabels
+          .map(([key, label]) => {
+            const done = r.steps[key];
+            return `<span class="step-badge ${done ? "done" : "skip"}">${label}</span>`;
+          })
+          .join(" ");
+
+        const warningHtml = r.warnings.length
+          ? `<div class="result-warnings">${r.warnings.join("<br/>")}</div>`
+          : "";
+        const errorHtml = r.error
+          ? `<div class="result-error-text">${r.error}</div>`
+          : "";
+
+        return `<div class="${cssClass}">
+          <strong>${icon} ${r.device_name}</strong>
+          ${r.ipmi_ip ? ` &mdash; ${r.ipmi_ip}` : ""}
+          <div class="step-badges">${stepBadges}</div>
+          ${warningHtml}${errorHtml}
+        </div>`;
+      })
+      .join("");
+  } catch (err) {
+    importProgressFill.style.width = "100%";
+    importProgressFill.style.background = "var(--error)";
+    importProgressText.textContent = "";
+    importResults.classList.remove("hidden");
+    importResults.className = "result-error";
+    importResults.innerHTML = `<strong>Import failed</strong><br />${err.message}`;
+  } finally {
+    importSubmitBtn.disabled = false;
+  }
+});
+
 // ── Navigation wiring ──────────────────────────────────────────────────
 $("#next-to-location").addEventListener("click", () => {
   showStep("location");
@@ -575,6 +726,13 @@ $("#nav-list").addEventListener("click", () => {
 
 $("#back-from-list").addEventListener("click", () => showStep("scan"));
 
+$("#nav-import").addEventListener("click", () => {
+  resetImportPanel();
+  showStep("import");
+});
+
+$("#back-from-import").addEventListener("click", () => showStep("scan"));
+
 // ── Auth ────────────────────────────────────────────────────────────────
 const userNameEl = $("#user-name");
 const logoutBtn = $("#logout-btn");
@@ -592,6 +750,7 @@ async function checkAuth() {
       userNameEl.textContent = user.name || user.sub || "";
       userNameEl.classList.remove("hidden");
       logoutBtn.classList.remove("hidden");
+      $("#nav-import").classList.remove("hidden");
       showStep("scan");
       return;
     }

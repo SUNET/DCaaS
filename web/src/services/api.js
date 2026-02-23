@@ -31,6 +31,11 @@ export function registerServer(payload) {
   return request("POST", "/servers/register", payload);
 }
 
+// Bulk import
+export function importServers(servers) {
+  return request("POST", "/servers/import", servers);
+}
+
 // Server list / status
 export function listServers() {
   return request("GET", "/servers");

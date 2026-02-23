@@ -142,6 +142,93 @@ class TestServerList:
         assert data[0]["status"] == "staged"
 
 
+class TestImport:
+    @patch("app.main.import_server", new_callable=AsyncMock)
+    def test_import_success(self, mock_import, client):
+        from app.models import ImportResultItem, RegistrationSteps
+
+        mock_import.return_value = ImportResultItem(
+            device_name="dcoa-ra07u45",
+            status="ok",
+            steps=RegistrationSteps(
+                secret_stored=True,
+                ipmi_ip_assigned=True,
+                ironic_node_created=True,
+            ),
+            ipmi_ip="10.16.28.78",
+        )
+
+        resp = client.post(
+            "/api/v1/servers/import",
+            json=[
+                {
+                    "device_name": "dcoa-ra07u45",
+                    "bmc_mac": "3CECEFA19CE8",
+                    "ipmi_password": "secret123",
+                    "ipmi_ip": "10.16.28.78",
+                }
+            ],
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["device_name"] == "dcoa-ra07u45"
+        assert data[0]["status"] == "ok"
+        assert data[0]["steps"]["secret_stored"] is True
+
+    def test_import_invalid_mac(self, client):
+        resp = client.post(
+            "/api/v1/servers/import",
+            json=[
+                {
+                    "device_name": "test",
+                    "bmc_mac": "invalid",
+                    "ipmi_password": "secret",
+                }
+            ],
+        )
+        assert resp.status_code == 422
+
+    def test_import_missing_required_field(self, client):
+        resp = client.post(
+            "/api/v1/servers/import",
+            json=[{"device_name": "test", "bmc_mac": "3CECEFA19CE8"}],
+        )
+        assert resp.status_code == 422
+
+    @patch("app.main.import_server", new_callable=AsyncMock)
+    def test_import_batch(self, mock_import, client):
+        from app.models import ImportResultItem, RegistrationSteps
+
+        mock_import.side_effect = [
+            ImportResultItem(
+                device_name="server1",
+                status="ok",
+                steps=RegistrationSteps(secret_stored=True),
+            ),
+            ImportResultItem(
+                device_name="server2",
+                status="failed",
+                steps=RegistrationSteps(),
+                error="Connection refused",
+            ),
+        ]
+
+        resp = client.post(
+            "/api/v1/servers/import",
+            json=[
+                {"device_name": "server1", "bmc_mac": "AABBCCDDEEFF", "ipmi_password": "p1"},
+                {"device_name": "server2", "bmc_mac": "112233445566", "ipmi_password": "p2"},
+            ],
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 2
+        assert data[0]["status"] == "ok"
+        assert data[1]["status"] == "failed"
+        assert data[1]["error"] == "Connection refused"
+
+
 class TestServerStatus:
     def test_not_found(self, client):
         resp = client.get("/api/v1/servers/nonexistent/status")

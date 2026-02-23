@@ -15,6 +15,8 @@ from app.integrations.netbox import NetboxClient
 from app.models import (
     DeviceRoleRef,
     DeviceTypeRef,
+    ImportResultItem,
+    ImportServerItem,
     LocationRef,
     PrefixRef,
     RackRef,
@@ -24,7 +26,7 @@ from app.models import (
     ServerStatusResponse,
     SiteRef,
 )
-from app.workflow import get_server_status, register_server
+from app.workflow import get_server_status, import_server, register_server
 
 logging.basicConfig(
     level=logging.DEBUG if settings.debug else logging.INFO,
@@ -104,6 +106,27 @@ async def register(
             },
         )
     return result
+
+
+@app.post("/api/v1/servers/import", response_model=list[ImportResultItem])
+async def import_servers(
+    servers: list[ImportServerItem],
+    claims: dict[str, Any] = Depends(validate_token),
+):
+    """Bulk-import existing servers.
+
+    Each server is processed independently; failures don't stop the batch.
+    """
+    logger.info(
+        "Import requested by %s for %d servers",
+        claims.get("sub", "unknown"),
+        len(servers),
+    )
+    results = []
+    for item in servers:
+        result = await import_server(item)
+        results.append(result)
+    return results
 
 
 @app.get("/api/v1/servers", response_model=list[ServerListItem])

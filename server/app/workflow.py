@@ -13,6 +13,8 @@ from app.integrations.netbox import NetboxClient
 from app.integrations.openbao import OpenBaoClient
 from app.models import (
     DeviceStatus,
+    ImportResultItem,
+    ImportServerItem,
     RegisterServerRequest,
     RegisterServerResponse,
     RegistrationSteps,
@@ -154,3 +156,110 @@ def list_servers() -> list[ServerStatusResponse]:
         key=lambda s: s.created_at,
         reverse=True,
     )
+
+
+async def import_server(item: ImportServerItem) -> ImportResultItem:
+    """Import a single server, running only the applicable integration steps.
+
+    - Netbox: only if all Netbox fields are provided
+    - OpenBao: always
+    - Kea/Metal3: only if ipmi_ip is known (from input or Netbox allocation)
+    """
+    steps = RegistrationSteps()
+    warnings: list[str] = []
+    ipmi_ip = item.ipmi_ip
+    formatted_mac = item.formatted_mac()
+
+    try:
+        # Step 1: Netbox — only if all required Netbox fields are present
+        if item.has_netbox_fields():
+            netbox = NetboxClient()
+
+            netbox_id, device_created = netbox.create_device(
+                name=item.device_name,
+                site=item.site,
+                location=item.location,
+                rack=item.rack,
+                position=item.position,
+                device_type=item.device_type,
+                device_role=item.device_role,
+            )
+            steps.netbox_device_created = True
+            if not device_created:
+                warnings.append(f"Device already exists in Netbox (ID {netbox_id}), skipping creation")
+
+            interface_id, iface_created = netbox.create_bmc_interface(netbox_id, formatted_mac)
+            steps.netbox_interface_created = True
+            if not iface_created:
+                warnings.append("IPMI interface already exists, skipping creation")
+
+            # Allocate IP from Netbox if prefix is provided and no explicit ipmi_ip
+            if item.ipmi_prefix and not ipmi_ip:
+                allocated_ip, ip_created = netbox.allocate_ipmi_ip(
+                    item.device_name, interface_id, item.ipmi_prefix,
+                )
+                if allocated_ip:
+                    ipmi_ip = allocated_ip
+                    if not ip_created:
+                        warnings.append(f"IPMI IP {ipmi_ip} already assigned, skipping allocation")
+                else:
+                    warnings.append("IPMI IP allocation returned None (check token permissions)")
+        else:
+            warnings.append("Netbox fields incomplete, skipping Netbox steps")
+
+        # Step 2: OpenBao — always
+        openbao = OpenBaoClient()
+        openbao.store_credentials(
+            device_name=item.device_name,
+            password=item.ipmi_password,
+            bmc_mac=formatted_mac,
+        )
+        steps.secret_stored = True
+
+        # Step 3: Kea DHCP — only if ipmi_ip is known
+        if ipmi_ip:
+            kea = KeaClient()
+            await kea.add_reservation(
+                mac_address=formatted_mac,
+                ip_address=ipmi_ip,
+                hostname=f"{item.device_name}-bmc",
+            )
+            steps.ipmi_ip_assigned = True
+        else:
+            warnings.append("No IPMI IP available, skipping Kea DHCP reservation")
+
+        # Step 4: Metal3 — only if ipmi_ip is known
+        if ipmi_ip:
+            metal3 = Metal3Client()
+            metal3.create_bmc_secret(
+                device_name=item.device_name,
+                username="ADMIN",
+                password=item.ipmi_password,
+            )
+            metal3.create_baremetalhost(
+                device_name=item.device_name,
+                boot_mac=formatted_mac,
+                ipmi_ip=ipmi_ip,
+            )
+            steps.ironic_node_created = True
+        else:
+            warnings.append("No IPMI IP available, skipping Metal3 BareMetalHost")
+
+        return ImportResultItem(
+            device_name=item.device_name,
+            status="ok",
+            steps=steps,
+            warnings=warnings,
+            ipmi_ip=ipmi_ip,
+        )
+
+    except Exception as e:
+        logger.exception("Import failed for %s at steps=%s", item.device_name, steps)
+        return ImportResultItem(
+            device_name=item.device_name,
+            status="failed",
+            steps=steps,
+            warnings=warnings,
+            error=str(e),
+            ipmi_ip=ipmi_ip,
+        )
