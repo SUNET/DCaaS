@@ -48,7 +48,7 @@ async def _get_jwks() -> dict:
     return jwks
 
 
-async def _validate_jwt(token: str) -> dict[str, Any]:
+async def _validate_jwt(token: str, access_token: str | None = None) -> dict[str, Any]:
     """Validate a JWT and return its claims."""
     jwks = await _get_jwks()
     unverified_header = jwt.get_unverified_header(token)
@@ -71,6 +71,7 @@ async def _validate_jwt(token: str) -> dict[str, Any]:
         algorithms=["RS256"],
         audience=settings.oidc_audience,
         issuer=settings.oidc_issuer,
+        access_token=access_token,
     )
     return claims
 
@@ -118,7 +119,9 @@ async def validate_token(request: Request) -> dict[str, Any]:
             data = serializer.loads(cookie, max_age=8 * 3600)
             id_token = data.get("id_token")
             if id_token:
-                claims = await _validate_jwt(id_token)
+                claims = await _validate_jwt(
+                    id_token, access_token=data.get("access_token")
+                )
                 _check_authorization(claims)
                 return claims
         except (BadSignature, SignatureExpired) as e:

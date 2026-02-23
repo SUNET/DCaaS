@@ -118,8 +118,10 @@ async def callback(request: Request, code: str, state: str):
         logger.error("id_token validation failed: %s", exc)
         return Response("Invalid id_token", status_code=502)
 
-    # Store the id_token in a signed cookie
-    session_value = _serializer().dumps({"id_token": id_token})
+    # Store tokens in a signed cookie
+    session_value = _serializer().dumps(
+        {"id_token": id_token, "access_token": access_token}
+    )
 
     response = RedirectResponse(url="/", status_code=302)
     response.set_cookie(
