@@ -193,7 +193,7 @@ async function loadSites() {
 async function loadLocations(site) {
   try {
     const locations = await getLocations(site);
-    locationSelect.innerHTML = '<option value="">Select rack row...</option>';
+    locationSelect.innerHTML = '<option value="">Select location...</option>';
     locations.forEach((l) => {
       const opt = document.createElement("option");
       opt.value = l.slug;
@@ -273,7 +273,7 @@ siteSelect.addEventListener("change", async () => {
   state.site = siteSelect.value;
   state.location = "";
   state.rack = "";
-  locationSelect.innerHTML = '<option value="">Select rack row...</option>';
+  locationSelect.innerHTML = '<option value="">Select location...</option>';
   locationSelect.disabled = true;
   rackSelect.innerHTML = '<option value="">Select rack...</option>';
   rackSelect.disabled = true;
@@ -331,7 +331,7 @@ function buildReview() {
     ["BMC MAC", formatMac(state.mac)],
     ["IPMI Password", "\u2022".repeat(state.password.length)],
     ["Datacenter", state.site],
-    ["Rack Row", state.location],
+    ["Location", state.location],
     ["Rack", state.rack],
     ["U Position", state.position],
     ["Device Type", state.deviceType],
