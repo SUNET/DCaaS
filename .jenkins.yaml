@@ -1,0 +1,26 @@
+---
+# DCaaS onboarding images for SUNET Platform
+clean_workspace: true
+triggers:
+  cron: "@daily"
+
+extra_jobs:
+  # FastAPI onboarding API server
+  - name: dcaas-api
+    builders:
+      - docker
+    docker_name: platform/dcaas-api
+    docker_context_dir: server
+    docker_tags:
+      - "0.1.0"
+      - "latest"
+
+  # PWA web frontend (nginx)
+  - name: dcaas-web
+    builders:
+      - docker
+    docker_name: platform/dcaas-web
+    docker_context_dir: web
+    docker_tags:
+      - "0.1.0"
+      - "latest"

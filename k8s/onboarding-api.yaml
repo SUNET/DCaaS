@@ -72,7 +72,7 @@ spec:
       serviceAccountName: onboarding-api
       containers:
         - name: api
-          image: ghcr.io/sunet/dcaas-onboarding-api:latest
+          image: docker.sunet.se/platform/dcaas-api:latest
           ports:
             - containerPort: 8000
               name: http
