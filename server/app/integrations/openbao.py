@@ -1,4 +1,4 @@
-"""OpenBao (Vault-compatible) integration for IPMI credential storage."""
+"""OpenBao (Vault-compatible) integration for BMC credential storage."""
 
 import logging
 
@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class OpenBaoClient:
-    """Client for storing and retrieving IPMI credentials in OpenBao."""
+    """Client for storing and retrieving BMC credentials in OpenBao."""
 
     def __init__(self) -> None:
         self.client = hvac.Client(url=settings.openbao_url)
@@ -29,7 +29,7 @@ class OpenBaoClient:
         """Check if a secret already exists for this device."""
         try:
             result = self.client.secrets.kv.v2.read_secret_version(
-                path=f"ipmi/{device_name}",
+                path=f"bmc/{device_name}",
                 mount_point=settings.openbao_mount_point,
             )
             return result is not None
@@ -39,13 +39,13 @@ class OpenBaoClient:
     def store_credentials(
         self, device_name: str, password: str, bmc_mac: str, username: str = "ADMIN"
     ) -> None:
-        """Store IPMI credentials in OpenBao at secret/data/ipmi/{device_name}."""
+        """Store BMC credentials in OpenBao at secret/data/bmc/{device_name}."""
         if self.secret_exists(device_name):
             logger.info("Secret for %s already exists, skipping", device_name)
             return
 
         self.client.secrets.kv.v2.create_or_update_secret(
-            path=f"ipmi/{device_name}",
+            path=f"bmc/{device_name}",
             secret={
                 "username": username,
                 "password": password,
@@ -53,13 +53,13 @@ class OpenBaoClient:
             },
             mount_point=settings.openbao_mount_point,
         )
-        logger.info("Stored IPMI credentials for %s", device_name)
+        logger.info("Stored BMC credentials for %s", device_name)
 
     def read_credentials(self, device_name: str) -> dict | None:
-        """Read IPMI credentials for a device."""
+        """Read BMC credentials for a device."""
         try:
             result = self.client.secrets.kv.v2.read_secret_version(
-                path=f"ipmi/{device_name}",
+                path=f"bmc/{device_name}",
                 mount_point=settings.openbao_mount_point,
             )
             return result["data"]["data"]

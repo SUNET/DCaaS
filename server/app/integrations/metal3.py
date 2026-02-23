@@ -90,7 +90,7 @@ class Metal3Client:
         self,
         device_name: str,
         boot_mac: str,
-        ipmi_ip: str,
+        bmc_ip: str,
     ) -> None:
         """Create a BareMetalHost custom resource."""
         if self.baremetalhost_exists(device_name):
@@ -108,7 +108,7 @@ class Metal3Client:
                 "online": False,
                 "bootMACAddress": boot_mac,
                 "bmc": {
-                    "address": f"ipmi://{ipmi_ip}",
+                    "address": f"ipmi://{bmc_ip}",
                     "credentialsName": self._bmc_secret_name(device_name),
                 },
                 "automatedCleaningMode": "disabled",

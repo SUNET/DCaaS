@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, field_validator
 
 class DeviceStatus(str, Enum):
     registered = "registered"
-    ipmi_configured = "ipmi_configured"
+    bmc_configured = "bmc_configured"
     pxe_booting = "pxe_booting"
     os_installed = "os_installed"
     ansible_ready = "ansible_ready"
@@ -19,14 +19,14 @@ class DeviceStatus(str, Enum):
 
 class RegisterServerRequest(BaseModel):
     bmc_mac: str = Field(..., description="BMC MAC address as 12 hex characters")
-    ipmi_password: str = Field(..., min_length=1, description="IPMI/BMC password")
+    bmc_password: str = Field(..., min_length=1, description="BMC password")
     site: str = Field(..., description="Netbox site slug (e.g. 'dcoa')")
     location: str = Field(..., description="Netbox location slug (e.g. 'rb06')")
     rack: str = Field(..., description="Netbox rack name")
     position: int = Field(..., ge=1, le=50, description="Rack U position (bottom U)")
     device_type: str = Field(..., description="Netbox device type slug")
     device_role: str = Field(..., description="Netbox device role slug")
-    ipmi_prefix: str = Field(..., description="IPMI subnet prefix (e.g. 10.16.28.0/24)")
+    bmc_prefix: str = Field(..., description="BMC subnet prefix (e.g. 10.16.28.0/24)")
     tenant: str = Field("", description="Netbox tenant slug for IP address allocation")
 
     @field_validator("bmc_mac")
@@ -51,7 +51,7 @@ class RegistrationSteps(BaseModel):
     netbox_device_created: bool = False
     netbox_interface_created: bool = False
     secret_stored: bool = False
-    ipmi_ip_assigned: bool = False
+    bmc_ip_assigned: bool = False
     ironic_node_created: bool = False
 
 
@@ -60,7 +60,7 @@ class RegisterServerResponse(BaseModel):
     status: DeviceStatus = DeviceStatus.registered
     device_name: str
     netbox_id: int | None = None
-    ipmi_ip: str | None = None
+    bmc_ip: str | None = None
     steps: RegistrationSteps = Field(default_factory=RegistrationSteps)
     warnings: list[str] = Field(default_factory=list)
     error: str | None = None
@@ -73,7 +73,7 @@ class ServerStatusResponse(BaseModel):
     site: str
     rack: str
     position: int
-    ipmi_ip: str | None = None
+    bmc_ip: str | None = None
     netbox_id: int | None = None
     created_at: datetime
     steps: RegistrationSteps
@@ -131,15 +131,15 @@ class TenantRef(BaseModel):
 class ImportServerItem(BaseModel):
     device_name: str
     bmc_mac: str = Field(..., description="BMC MAC address as 12 hex characters")
-    ipmi_password: str = Field(..., min_length=1, description="IPMI/BMC password")
-    ipmi_ip: str | None = None
+    bmc_password: str = Field(..., min_length=1, description="BMC password")
+    bmc_ip: str | None = None
     site: str | None = None
     location: str | None = None
     rack: str | None = None
     position: int | None = None
     device_type: str | None = None
     device_role: str | None = None
-    ipmi_prefix: str | None = None
+    bmc_prefix: str | None = None
     tenant: str | None = None
 
     @field_validator("bmc_mac")
@@ -173,4 +173,4 @@ class ImportResultItem(BaseModel):
     steps: RegistrationSteps
     warnings: list[str] = Field(default_factory=list)
     error: str | None = None
-    ipmi_ip: str | None = None
+    bmc_ip: str | None = None

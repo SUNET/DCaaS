@@ -26,15 +26,15 @@ Automates bare-metal server onboarding into a Kubernetes cluster. Scan a barcode
 Python FastAPI application that orchestrates the registration workflow:
 
 1. Creates device + BMC interface in **Netbox**
-2. Stores IPMI credentials in **OpenBao** (Vault-compatible)
-3. Allocates IPMI IP from Netbox IPAM and pushes DHCP reservation to **Kea**
+2. Stores BMC credentials in **OpenBao** (Vault-compatible)
+3. Allocates BMC IP from Netbox IPAM and pushes DHCP reservation to **Kea**
 4. Creates `BareMetalHost` CRD + BMC Secret in **Metal3**
 
 ### PWA (`web/`)
 
 Progressive Web App with barcode scanning for mobile use:
 
-- Two-step barcode scan: BMC MAC address + IPMI password
+- Two-step barcode scan: BMC MAC address + BMC password
 - Location form: datacenter, rack row, rack, U position, device type, role
 - Remembers last-used location fields across scans
 - Live registration progress with per-step status
@@ -99,7 +99,7 @@ The API server is configured via environment variables (prefix `ONBOARDING_`):
 | `ONBOARDING_KEA_SERVERS` | JSON list of Kea CA host IPs |
 | `ONBOARDING_KEA_PORT` | Kea Control Agent port (default: 8000) |
 | `ONBOARDING_KEA_SUBNET_ID` | Kea subnet ID for reservations |
-| `ONBOARDING_IPMI_PREFIX` | Netbox IPAM prefix for IPMI IPs |
+| `ONBOARDING_BMC_PREFIX` | Netbox IPAM prefix for BMC IPs |
 | `ONBOARDING_METAL3_NAMESPACE` | K8s namespace for Metal3 resources |
 
 ## Naming Convention

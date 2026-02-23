@@ -11,14 +11,14 @@ stringData:
       "Dhcp4": {
         "lease-database": {
           "type": "postgresql",
-          "host": "postgres.metal3.svc",
+          "host": "kea-postgres-rw",
           "name": "kea",
           "user": "kea",
           "password": "changeme"
         },
         "hosts-database": {
           "type": "postgresql",
-          "host": "postgres.metal3.svc",
+          "host": "kea-postgres-rw",
           "name": "kea",
           "user": "kea",
           "password": "changeme"

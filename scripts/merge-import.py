@@ -6,9 +6,9 @@ Usage:
 
 The YAML file should contain entries like:
     - device_name: ra07u01
-      ipmi_password: secret123
+      bmc_password: secret123
       bmc_mac:
-      ipmi_ip:
+      bmc_ip:
 
 The Kea JSON file contains entries like:
     { "hostname": "dcoa-ra07u01.bmc.platform.sunet.se",
@@ -31,7 +31,7 @@ def build_lookup(reservations: list[dict]) -> dict[str, dict]:
         short = r["hostname"].split(".")[0]
         lookup[short] = {
             "bmc_mac": r["hw-address"].replace(":", "").upper(),
-            "ipmi_ip": r["ip-address"],
+            "bmc_ip": r["ip-address"],
         }
     return lookup
 
@@ -57,12 +57,12 @@ def merge(yaml_entries: list[dict], reservations: list[dict]) -> list[dict]:
             continue
 
         # Use YAML values if present, otherwise fill from Kea
-        password = entry.get("ipmi_password") or entry.get("impi_password") or ""
+        password = entry.get("bmc_password") or ""
         results.append({
             "device_name": name,
             "bmc_mac": entry.get("bmc_mac") or match["bmc_mac"],
-            "ipmi_password": password,
-            "ipmi_ip": entry.get("ipmi_ip") or match["ipmi_ip"],
+            "bmc_password": password,
+            "bmc_ip": entry.get("bmc_ip") or match["bmc_ip"],
         })
 
     if missing:

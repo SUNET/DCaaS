@@ -32,9 +32,9 @@ async def register_server(req: RegisterServerRequest) -> RegisterServerResponse:
 
     Steps:
     1. Generate device name
-    2. Create device in Netbox (with IPMI interface)
-    3. Store IPMI password in OpenBao
-    4. Reserve IPMI IP in Kea DHCP
+    2. Create device in Netbox (with BMC interface)
+    3. Store BMC password in OpenBao
+    4. Reserve BMC IP in Kea DHCP
     5. Create Ironic/Metal3 bare metal node
     6. Update Netbox device status to 'staged'
     """
@@ -43,11 +43,11 @@ async def register_server(req: RegisterServerRequest) -> RegisterServerResponse:
     steps = RegistrationSteps()
     response = RegisterServerResponse(device_name=device_name)
     netbox_id: int | None = None
-    ipmi_ip: str | None = None
+    bmc_ip: str | None = None
     warnings: list[str] = []
 
     try:
-        # Step 1+2: Create device and IPMI interface in Netbox
+        # Step 1+2: Create device and BMC interface in Netbox
         netbox = NetboxClient()
 
         netbox_id, device_created = netbox.create_device(
@@ -66,45 +66,45 @@ async def register_server(req: RegisterServerRequest) -> RegisterServerResponse:
         interface_id, iface_created = netbox.create_bmc_interface(netbox_id, formatted_mac)
         steps.netbox_interface_created = True
         if not iface_created:
-            warnings.append("IPMI interface already exists, skipping creation")
+            warnings.append("BMC interface already exists, skipping creation")
 
-        # Step 3: Store IPMI credentials in OpenBao
+        # Step 3: Store BMC credentials in OpenBao
         openbao = OpenBaoClient()
         openbao.store_credentials(
             device_name=device_name,
-            password=req.ipmi_password,
+            password=req.bmc_password,
             bmc_mac=formatted_mac,
         )
         steps.secret_stored = True
 
-        # Step 4: Allocate IPMI IP from Netbox IPAM and push DHCP reservation to Kea
-        ipmi_ip, ip_created = netbox.allocate_ipmi_ip(device_name, interface_id, req.ipmi_prefix, req.tenant)
+        # Step 4: Allocate BMC IP from Netbox IPAM and push DHCP reservation to Kea
+        bmc_ip, ip_created = netbox.allocate_bmc_ip(device_name, interface_id, req.bmc_prefix, req.tenant)
 
-        if ipmi_ip:
+        if bmc_ip:
             kea = KeaClient()
             await kea.add_reservation(
                 mac_address=formatted_mac,
-                ip_address=ipmi_ip,
+                ip_address=bmc_ip,
                 hostname=f"{device_name}-bmc",
             )
-            steps.ipmi_ip_assigned = True
+            steps.bmc_ip_assigned = True
             if not ip_created:
-                warnings.append(f"IPMI IP {ipmi_ip} already assigned, skipping allocation")
+                warnings.append(f"BMC IP {bmc_ip} already assigned, skipping allocation")
         else:
-            warnings.append("IPMI IP already assigned in Netbox but could not be read (check token permissions)")
-            steps.ipmi_ip_assigned = True  # not failed, just pre-existing
+            warnings.append("BMC IP already assigned in Netbox but could not be read (check token permissions)")
+            steps.bmc_ip_assigned = True  # not failed, just pre-existing
 
         # Step 5: Create Ironic/Metal3 bare metal node
         metal3 = Metal3Client()
         metal3.create_bmc_secret(
             device_name=device_name,
             username="ADMIN",
-            password=req.ipmi_password,
+            password=req.bmc_password,
         )
         metal3.create_baremetalhost(
             device_name=device_name,
             boot_mac=formatted_mac,
-            ipmi_ip=ipmi_ip,
+            bmc_ip=bmc_ip,
         )
         steps.ironic_node_created = True
 
@@ -113,7 +113,7 @@ async def register_server(req: RegisterServerRequest) -> RegisterServerResponse:
 
         response.status = DeviceStatus.registered
         response.netbox_id = netbox_id
-        response.ipmi_ip = ipmi_ip
+        response.bmc_ip = bmc_ip
         response.steps = steps
         response.warnings = warnings
 
@@ -123,7 +123,7 @@ async def register_server(req: RegisterServerRequest) -> RegisterServerResponse:
         logger.exception("Registration failed for %s at steps=%s", device_name, steps)
         response.status = DeviceStatus.failed
         response.netbox_id = netbox_id
-        response.ipmi_ip = ipmi_ip
+        response.bmc_ip = bmc_ip
         response.steps = steps
         response.error = str(e)
 
@@ -135,7 +135,7 @@ async def register_server(req: RegisterServerRequest) -> RegisterServerResponse:
         site=req.site,
         rack=req.rack,
         position=req.position,
-        ipmi_ip=response.ipmi_ip,
+        bmc_ip=response.bmc_ip,
         netbox_id=response.netbox_id,
         created_at=datetime.now(timezone.utc),
         steps=response.steps,
@@ -163,11 +163,11 @@ async def import_server(item: ImportServerItem) -> ImportResultItem:
 
     - Netbox: only if all Netbox fields are provided
     - OpenBao: always
-    - Kea/Metal3: only if ipmi_ip is known (from input or Netbox allocation)
+    - Kea/Metal3: only if bmc_ip is known (from input or Netbox allocation)
     """
     steps = RegistrationSteps()
     warnings: list[str] = []
-    ipmi_ip = item.ipmi_ip
+    bmc_ip = item.bmc_ip
     formatted_mac = item.formatted_mac()
 
     try:
@@ -191,20 +191,20 @@ async def import_server(item: ImportServerItem) -> ImportResultItem:
             interface_id, iface_created = netbox.create_bmc_interface(netbox_id, formatted_mac)
             steps.netbox_interface_created = True
             if not iface_created:
-                warnings.append("IPMI interface already exists, skipping creation")
+                warnings.append("BMC interface already exists, skipping creation")
 
-            # Allocate IP from Netbox if prefix is provided and no explicit ipmi_ip
-            if item.ipmi_prefix and not ipmi_ip:
-                allocated_ip, ip_created = netbox.allocate_ipmi_ip(
-                    item.device_name, interface_id, item.ipmi_prefix,
+            # Allocate IP from Netbox if prefix is provided and no explicit bmc_ip
+            if item.bmc_prefix and not bmc_ip:
+                allocated_ip, ip_created = netbox.allocate_bmc_ip(
+                    item.device_name, interface_id, item.bmc_prefix,
                     item.tenant or "",
                 )
                 if allocated_ip:
-                    ipmi_ip = allocated_ip
+                    bmc_ip = allocated_ip
                     if not ip_created:
-                        warnings.append(f"IPMI IP {ipmi_ip} already assigned, skipping allocation")
+                        warnings.append(f"BMC IP {bmc_ip} already assigned, skipping allocation")
                 else:
-                    warnings.append("IPMI IP allocation returned None (check token permissions)")
+                    warnings.append("BMC IP allocation returned None (check token permissions)")
         else:
             warnings.append("Netbox fields incomplete, skipping Netbox steps")
 
@@ -212,46 +212,46 @@ async def import_server(item: ImportServerItem) -> ImportResultItem:
         openbao = OpenBaoClient()
         openbao.store_credentials(
             device_name=item.device_name,
-            password=item.ipmi_password,
+            password=item.bmc_password,
             bmc_mac=formatted_mac,
         )
         steps.secret_stored = True
 
-        # Step 3: Kea DHCP — only if ipmi_ip is known
-        if ipmi_ip:
+        # Step 3: Kea DHCP — only if bmc_ip is known
+        if bmc_ip:
             kea = KeaClient()
             await kea.add_reservation(
                 mac_address=formatted_mac,
-                ip_address=ipmi_ip,
+                ip_address=bmc_ip,
                 hostname=f"{item.device_name}-bmc",
             )
-            steps.ipmi_ip_assigned = True
+            steps.bmc_ip_assigned = True
         else:
-            warnings.append("No IPMI IP available, skipping Kea DHCP reservation")
+            warnings.append("No BMC IP available, skipping Kea DHCP reservation")
 
-        # Step 4: Metal3 — only if ipmi_ip is known
-        if ipmi_ip:
+        # Step 4: Metal3 — only if bmc_ip is known
+        if bmc_ip:
             metal3 = Metal3Client()
             metal3.create_bmc_secret(
                 device_name=item.device_name,
                 username="ADMIN",
-                password=item.ipmi_password,
+                password=item.bmc_password,
             )
             metal3.create_baremetalhost(
                 device_name=item.device_name,
                 boot_mac=formatted_mac,
-                ipmi_ip=ipmi_ip,
+                bmc_ip=bmc_ip,
             )
             steps.ironic_node_created = True
         else:
-            warnings.append("No IPMI IP available, skipping Metal3 BareMetalHost")
+            warnings.append("No BMC IP available, skipping Metal3 BareMetalHost")
 
         return ImportResultItem(
             device_name=item.device_name,
             status="ok",
             steps=steps,
             warnings=warnings,
-            ipmi_ip=ipmi_ip,
+            bmc_ip=bmc_ip,
         )
 
     except Exception as e:
@@ -262,5 +262,5 @@ async def import_server(item: ImportServerItem) -> ImportResultItem:
             steps=steps,
             warnings=warnings,
             error=str(e),
-            ipmi_ip=ipmi_ip,
+            bmc_ip=bmc_ip,
         )

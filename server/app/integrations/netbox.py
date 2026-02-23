@@ -126,28 +126,28 @@ class NetboxClient:
         return device.id, True
 
     def create_bmc_interface(self, device_id: int, mac_address: str) -> tuple[int, bool]:
-        """Create an ipmi interface on a device. Returns (interface_id, created)."""
+        """Create a BMC interface on a device. Returns (interface_id, created)."""
         existing = list(
-            self.api.dcim.interfaces.filter(device_id=device_id, name="ipmi")
+            self.api.dcim.interfaces.filter(device_id=device_id, name="bmc")
         )
         if existing:
-            logger.info("ipmi interface already exists on device %d", device_id)
+            logger.info("BMC interface already exists on device %d", device_id)
             return existing[0].id, False
 
         iface = self.api.dcim.interfaces.create(
             device=device_id,
-            name="ipmi",
+            name="bmc",
             type="1000base-t",
             mac_address=mac_address,
         )
-        logger.info("Created ipmi interface %d on device %d", iface.id, device_id)
+        logger.info("Created BMC interface %d on device %d", iface.id, device_id)
         return iface.id, True
 
     def get_prefixes(self) -> list[dict]:
-        """List all prefixes with role 'ipmi'."""
+        """List all prefixes with role 'bmc'."""
         return [
             {"prefix": str(p.prefix), "description": p.description or str(p.prefix)}
-            for p in self.api.ipam.prefixes.filter(role="ipmi")
+            for p in self.api.ipam.prefixes.filter(role="bmc")
         ]
 
     def get_tenants(self) -> list[dict]:
@@ -157,8 +157,8 @@ class NetboxClient:
             for t in self.api.tenancy.tenants.all()
         ]
 
-    def allocate_ipmi_ip(self, device_name: str, interface_id: int, ipmi_prefix: str, tenant: str = "") -> tuple[str | None, bool]:
-        """Allocate the next available IP from the given prefix and assign it to the IPMI interface.
+    def allocate_bmc_ip(self, device_name: str, interface_id: int, bmc_prefix: str, tenant: str = "") -> tuple[str | None, bool]:
+        """Allocate the next available IP from the given prefix and assign it to the BMC interface.
 
         Returns (ip_address, created). If the IP already exists, created is False.
         Returns (None, False) if allocation fails due to permissions.
@@ -181,12 +181,12 @@ class NetboxClient:
             )
             return None, False
 
-        prefix = self.api.ipam.prefixes.get(prefix=ipmi_prefix)
+        prefix = self.api.ipam.prefixes.get(prefix=bmc_prefix)
         if prefix is None:
-            raise ValueError(f"IPMI prefix '{ipmi_prefix}' not found in Netbox")
+            raise ValueError(f"BMC prefix '{bmc_prefix}' not found in Netbox")
 
         ip_data = {
-            "description": f"{device_name} IPMI",
+            "description": f"{device_name} BMC",
             "assigned_object_type": "dcim.interface",
             "assigned_object_id": interface_id,
         }

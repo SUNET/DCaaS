@@ -38,12 +38,12 @@ class TestRegistration:
             status=DeviceStatus.registered,
             device_name="dcoa-rb06u31",
             netbox_id=1234,
-            ipmi_ip="10.0.100.42",
+            bmc_ip="10.0.100.42",
             steps=RegistrationSteps(
                 netbox_device_created=True,
                 netbox_interface_created=True,
                 secret_stored=True,
-                ipmi_ip_assigned=True,
+                bmc_ip_assigned=True,
                 ironic_node_created=True,
             ),
         )
@@ -52,14 +52,14 @@ class TestRegistration:
             "/api/v1/servers/register",
             json={
                 "bmc_mac": "3CECEFA19CE8",
-                "ipmi_password": "TestPass123",
+                "bmc_password": "TestPass123",
                 "site": "dcoa",
                 "location": "rb06",
                 "rack": "rb06",
                 "position": 31,
                 "device_type": "supermicro-1u",
                 "device_role": "k8s-worker",
-                "ipmi_prefix": "10.16.28.0/24",
+                "bmc_prefix": "10.16.28.0/24",
             },
         )
         assert resp.status_code == 201
@@ -73,14 +73,14 @@ class TestRegistration:
             "/api/v1/servers/register",
             json={
                 "bmc_mac": "invalid",
-                "ipmi_password": "test",
+                "bmc_password": "test",
                 "site": "dcoa",
                 "location": "rb06",
                 "rack": "rb06",
                 "position": 31,
                 "device_type": "supermicro-1u",
                 "device_role": "k8s-worker",
-                "ipmi_prefix": "10.16.28.0/24",
+                "bmc_prefix": "10.16.28.0/24",
             },
         )
         assert resp.status_code == 422
@@ -101,14 +101,14 @@ class TestRegistration:
             "/api/v1/servers/register",
             json={
                 "bmc_mac": "3CECEFA19CE8",
-                "ipmi_password": "TestPass123",
+                "bmc_password": "TestPass123",
                 "site": "dcoa",
                 "location": "rb06",
                 "rack": "rb06",
                 "position": 31,
                 "device_type": "supermicro-1u",
                 "device_role": "k8s-worker",
-                "ipmi_prefix": "10.16.28.0/24",
+                "bmc_prefix": "10.16.28.0/24",
             },
         )
         assert resp.status_code == 500
@@ -152,10 +152,10 @@ class TestImport:
             status="ok",
             steps=RegistrationSteps(
                 secret_stored=True,
-                ipmi_ip_assigned=True,
+                bmc_ip_assigned=True,
                 ironic_node_created=True,
             ),
-            ipmi_ip="10.16.28.78",
+            bmc_ip="10.16.28.78",
         )
 
         resp = client.post(
@@ -164,8 +164,8 @@ class TestImport:
                 {
                     "device_name": "dcoa-ra07u45",
                     "bmc_mac": "3CECEFA19CE8",
-                    "ipmi_password": "secret123",
-                    "ipmi_ip": "10.16.28.78",
+                    "bmc_password": "secret123",
+                    "bmc_ip": "10.16.28.78",
                 }
             ],
         )
@@ -183,7 +183,7 @@ class TestImport:
                 {
                     "device_name": "test",
                     "bmc_mac": "invalid",
-                    "ipmi_password": "secret",
+                    "bmc_password": "secret",
                 }
             ],
         )
@@ -217,8 +217,8 @@ class TestImport:
         resp = client.post(
             "/api/v1/servers/import",
             json=[
-                {"device_name": "server1", "bmc_mac": "AABBCCDDEEFF", "ipmi_password": "p1"},
-                {"device_name": "server2", "bmc_mac": "112233445566", "ipmi_password": "p2"},
+                {"device_name": "server1", "bmc_mac": "AABBCCDDEEFF", "bmc_password": "p1"},
+                {"device_name": "server2", "bmc_mac": "112233445566", "bmc_password": "p2"},
             ],
         )
         assert resp.status_code == 200
@@ -239,7 +239,7 @@ class TestImportWebSocket:
                 device_name="server1",
                 status="ok",
                 steps=RegistrationSteps(secret_stored=True),
-                ipmi_ip="10.0.0.1",
+                bmc_ip="10.0.0.1",
             ),
             ImportResultItem(
                 device_name="server2",
@@ -251,8 +251,8 @@ class TestImportWebSocket:
 
         with client.websocket_connect("/api/v1/servers/import/ws") as ws:
             ws.send_json([
-                {"device_name": "server1", "bmc_mac": "AABBCCDDEEFF", "ipmi_password": "p1"},
-                {"device_name": "server2", "bmc_mac": "112233445566", "ipmi_password": "p2"},
+                {"device_name": "server1", "bmc_mac": "AABBCCDDEEFF", "bmc_password": "p1"},
+                {"device_name": "server2", "bmc_mac": "112233445566", "bmc_password": "p2"},
             ])
 
             results = []
@@ -270,7 +270,7 @@ class TestImportWebSocket:
     def test_ws_validation_error(self, client):
         with client.websocket_connect("/api/v1/servers/import/ws") as ws:
             ws.send_json([
-                {"device_name": "test", "bmc_mac": "invalid", "ipmi_password": "p1"},
+                {"device_name": "test", "bmc_mac": "invalid", "bmc_password": "p1"},
             ])
 
             msg = ws.receive_json()

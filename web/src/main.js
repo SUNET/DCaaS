@@ -26,7 +26,7 @@ const state = {
   position: null,
   deviceType: "",
   deviceRole: "",
-  ipmiPrefix: "",
+  bmcPrefix: "",
   tenant: "",
 };
 
@@ -193,7 +193,7 @@ function updateLocationNextButton() {
     state.position &&
     state.deviceType &&
     state.deviceRole &&
-    state.ipmiPrefix &&
+    state.bmcPrefix &&
     state.tenant;
   $("#next-to-review").disabled = !ready;
 }
@@ -303,7 +303,7 @@ async function loadDeviceRoles() {
 async function loadPrefixes() {
   try {
     const prefixes = await getPrefixes();
-    prefixSelect.innerHTML = '<option value="">Select IPMI prefix...</option>';
+    prefixSelect.innerHTML = '<option value="">Select BMC prefix...</option>';
     prefixes.forEach((p) => {
       const opt = document.createElement("option");
       opt.value = p.prefix;
@@ -393,7 +393,7 @@ deviceRoleSelect.addEventListener("change", () => {
 });
 
 prefixSelect.addEventListener("change", () => {
-  state.ipmiPrefix = prefixSelect.value;
+  state.bmcPrefix = prefixSelect.value;
   updateLocationNextButton();
 });
 
@@ -411,14 +411,14 @@ function buildReview() {
   const dl = $("#review-summary");
   const items = [
     ["BMC MAC", formatMac(state.mac)],
-    ["IPMI Password", "\u2022".repeat(state.password.length)],
+    ["BMC Password", "\u2022".repeat(state.password.length)],
     ["Datacenter", state.site],
     ["Location", state.location],
     ["Rack", state.rack],
     ["U Position", state.position],
     ["Device Type", state.deviceType],
     ["Device Role", state.deviceRole],
-    ["IPMI Prefix", state.ipmiPrefix],
+    ["BMC Prefix", state.bmcPrefix],
     ["Tenant", state.tenant],
     ["Device Name", `${state.location}-${state.rack.toLowerCase()}u${state.position}`],
   ];
@@ -430,9 +430,9 @@ function buildReview() {
 
 const WORKFLOW_STEPS = [
   { key: "netbox_device_created", label: "Create device in Netbox" },
-  { key: "netbox_interface_created", label: "Create IPMI interface" },
+  { key: "netbox_interface_created", label: "Create BMC interface" },
   { key: "secret_stored", label: "Store credentials in OpenBao" },
-  { key: "ipmi_ip_assigned", label: "Assign IPMI IP via Kea DHCP" },
+  { key: "bmc_ip_assigned", label: "Assign BMC IP via Kea DHCP" },
   { key: "ironic_node_created", label: "Create Metal3 BareMetalHost" },
 ];
 
@@ -455,14 +455,14 @@ async function submitRegistration() {
   try {
     const result = await registerServer({
       bmc_mac: state.mac,
-      ipmi_password: state.password,
+      bmc_password: state.password,
       site: state.site,
       location: state.location,
       rack: state.rack,
       position: state.position,
       device_type: state.deviceType,
       device_role: state.deviceRole,
-      ipmi_prefix: state.ipmiPrefix,
+      bmc_prefix: state.bmcPrefix,
       tenant: state.tenant,
     });
 
@@ -487,7 +487,7 @@ async function submitRegistration() {
     banner.innerHTML = `
       &#x2714; Registered <code>${result.device_name}</code>
       <div class="banner-details">
-        IPMI IP: ${result.ipmi_ip || "N/A"} &middot; Netbox ID: ${result.netbox_id || "N/A"}
+        BMC IP: ${result.bmc_ip || "N/A"} &middot; Netbox ID: ${result.netbox_id || "N/A"}
       </div>
     `;
     banner.classList.remove("hidden");
@@ -630,9 +630,9 @@ importFileInput.addEventListener("change", () => {
       }
       // Validate required fields
       for (const [i, item] of parsed.entries()) {
-        if (!item.device_name || !item.bmc_mac || !item.ipmi_password) {
+        if (!item.device_name || !item.bmc_mac || !item.bmc_password) {
           throw new Error(
-            `Item ${i + 1} missing required fields (device_name, bmc_mac, ipmi_password)`
+            `Item ${i + 1} missing required fields (device_name, bmc_mac, bmc_password)`
           );
         }
       }
@@ -644,7 +644,7 @@ importFileInput.addEventListener("change", () => {
           return `<tr>
             <td>${s.device_name}</td>
             <td><code>${formatMacForDisplay(s.bmc_mac)}</code></td>
-            <td>${s.ipmi_ip || (s.ipmi_prefix ? "allocate" : "\u2014")}</td>
+            <td>${s.bmc_ip || (s.bmc_prefix ? "allocate" : "\u2014")}</td>
             <td>${hasNetbox ? "yes" : "skip"}</td>
           </tr>`;
         })
@@ -670,7 +670,7 @@ function renderImportResult(r) {
     ["netbox_device_created", "Netbox device"],
     ["netbox_interface_created", "Netbox interface"],
     ["secret_stored", "OpenBao secret"],
-    ["ipmi_ip_assigned", "Kea DHCP"],
+    ["bmc_ip_assigned", "Kea DHCP"],
     ["ironic_node_created", "Metal3 BMH"],
   ];
   const stepBadges = stepLabels
@@ -689,7 +689,7 @@ function renderImportResult(r) {
 
   return `<div class="${cssClass}">
     <strong>${icon} ${r.device_name}</strong>
-    ${r.ipmi_ip ? ` &mdash; ${r.ipmi_ip}` : ""}
+    ${r.bmc_ip ? ` &mdash; ${r.bmc_ip}` : ""}
     <div class="step-badges">${stepBadges}</div>
     ${warningHtml}${errorHtml}
   </div>`;

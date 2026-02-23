@@ -36,8 +36,8 @@ class Settings(BaseSettings):
     kea_port: int = 8000
     kea_subnet_id: int = 1
 
-    # Netbox IPAM - prefix to allocate IPMI IPs from
-    ipmi_prefix: str = ""
+    # Netbox IPAM - prefix to allocate BMC IPs from
+    bmc_prefix: str = ""
 
     # Ironic / Metal3
     metal3_namespace: str = "metal3"
