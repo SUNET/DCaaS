@@ -1,11 +1,12 @@
 """DCaaS Onboarding API — FastAPI application."""
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from typing import Any
 
 from cachetools import TTLCache
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketException, status
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth.oidc import validate_token
@@ -122,11 +123,97 @@ async def import_servers(
         claims.get("sub", "unknown"),
         len(servers),
     )
-    results = []
-    for item in servers:
+    results = await asyncio.gather(*(import_server(item) for item in servers))
+    return list(results)
+
+
+async def _validate_ws(ws: WebSocket) -> dict[str, Any]:
+    """Validate authentication for a WebSocket connection.
+
+    Re-uses the same logic as validate_token but works with WebSocket
+    objects (which expose .headers and .cookies but not Request).
+    """
+    if not settings.oidc_issuer:
+        return {"sub": "dev-user"}
+
+    from jose import JWTError
+
+    from app.auth.oidc import _check_authorization, _validate_jwt
+
+    # 1. Try Bearer token in headers (same header browsers can set via protocols)
+    auth_header = ws.headers.get("authorization", "")
+    if auth_header.lower().startswith("bearer "):
+        token = auth_header[7:]
+        try:
+            claims = await _validate_jwt(token)
+        except JWTError:
+            raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)
+        _check_authorization(claims)
+        return claims
+
+    # 2. Try session cookie
+    cookie = ws.cookies.get("onboarding_session")
+    if cookie and settings.session_secret:
+        from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
+
+        serializer = URLSafeTimedSerializer(settings.session_secret)
+        try:
+            data = serializer.loads(cookie, max_age=8 * 3600)
+            id_token = data.get("id_token")
+            if id_token:
+                claims = await _validate_jwt(
+                    id_token, access_token=data.get("access_token")
+                )
+                _check_authorization(claims)
+                return claims
+        except (BadSignature, SignatureExpired, JWTError):
+            raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)
+
+    raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)
+
+
+@app.websocket("/api/v1/servers/import/ws")
+async def import_servers_ws(ws: WebSocket):
+    """Bulk-import via WebSocket — streams per-server results in real time."""
+    claims = await _validate_ws(ws)
+    await ws.accept()
+
+    try:
+        data = await ws.receive_json()
+    except Exception:
+        await ws.close(code=1003, reason="Expected JSON array")
+        return
+
+    # Validate each item through the Pydantic model
+    try:
+        servers = [ImportServerItem(**item) for item in data]
+    except Exception as exc:
+        await ws.send_json({"error": str(exc)})
+        await ws.close(code=1003, reason="Validation error")
+        return
+
+    logger.info(
+        "WS import requested by %s for %d servers",
+        claims.get("sub", "unknown"),
+        len(servers),
+    )
+
+    queue: asyncio.Queue = asyncio.Queue()
+
+    async def _run(item: ImportServerItem):
         result = await import_server(item)
-        results.append(result)
-    return results
+        await queue.put(result)
+
+    tasks = [asyncio.create_task(_run(item)) for item in servers]
+
+    sent = 0
+    while sent < len(tasks):
+        result = await queue.get()
+        await ws.send_json(result.model_dump())
+        sent += 1
+
+    await ws.send_json({"done": True})
+    await ws.close()
 
 
 @app.get("/api/v1/servers", response_model=list[ServerListItem])

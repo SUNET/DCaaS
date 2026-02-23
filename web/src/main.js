@@ -4,7 +4,6 @@
 
 import {
   registerServer,
-  importServers,
   listServers,
   getSites,
   getLocations,
@@ -623,76 +622,117 @@ importFileInput.addEventListener("change", () => {
   reader.readAsText(file);
 });
 
-importSubmitBtn.addEventListener("click", async () => {
+function renderImportResult(r) {
+  const isOk = r.status === "ok";
+  const cssClass = isOk ? "import-result-ok" : "import-result-fail";
+  const icon = isOk ? "\u2714" : "\u2718";
+
+  const stepLabels = [
+    ["netbox_device_created", "Netbox device"],
+    ["netbox_interface_created", "Netbox interface"],
+    ["secret_stored", "OpenBao secret"],
+    ["ipmi_ip_assigned", "Kea DHCP"],
+    ["ironic_node_created", "Metal3 BMH"],
+  ];
+  const stepBadges = stepLabels
+    .map(([key, label]) => {
+      const done = r.steps[key];
+      return `<span class="step-badge ${done ? "done" : "skip"}">${label}</span>`;
+    })
+    .join(" ");
+
+  const warningHtml = r.warnings.length
+    ? `<div class="result-warnings">${r.warnings.join("<br/>")}</div>`
+    : "";
+  const errorHtml = r.error
+    ? `<div class="result-error-text">${r.error}</div>`
+    : "";
+
+  return `<div class="${cssClass}">
+    <strong>${icon} ${r.device_name}</strong>
+    ${r.ipmi_ip ? ` &mdash; ${r.ipmi_ip}` : ""}
+    <div class="step-badges">${stepBadges}</div>
+    ${warningHtml}${errorHtml}
+  </div>`;
+}
+
+importSubmitBtn.addEventListener("click", () => {
   if (!importData) return;
 
   importSubmitBtn.disabled = true;
   importProgress.classList.remove("hidden");
-  importResults.classList.add("hidden");
+  importResults.classList.remove("hidden");
+  importResults.className = "";
+  importResults.innerHTML = "";
   importProgressFill.style.width = "0%";
   importProgressFill.style.background = "";
   importProgressText.textContent = `Importing ${importData.length} servers...`;
 
-  try {
-    const results = await importServers(importData);
-    importProgressFill.style.width = "100%";
+  const total = importData.length;
+  let received = 0;
+  let ok = 0;
+  let failed = 0;
 
-    const ok = results.filter((r) => r.status === "ok").length;
-    const failed = results.filter((r) => r.status === "failed").length;
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  const ws = new WebSocket(`${proto}//${location.host}/api/v1/servers/import/ws`);
 
-    if (failed > 0) {
-      importProgressFill.style.background = "var(--warning)";
+  ws.onopen = () => {
+    ws.send(JSON.stringify(importData));
+  };
+
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+
+    if (msg.done) {
+      importProgressFill.style.width = "100%";
+      if (failed > 0) {
+        importProgressFill.style.background = "var(--warning)";
+      }
+      importProgressText.textContent = `Done: ${ok} succeeded, ${failed} failed`;
+      importSubmitBtn.disabled = false;
+      return;
     }
 
-    importProgressText.textContent = `Done: ${ok} succeeded, ${failed} failed`;
+    if (msg.error && !msg.device_name) {
+      // Validation error from server
+      importProgressFill.style.width = "100%";
+      importProgressFill.style.background = "var(--error)";
+      importProgressText.textContent = "";
+      importResults.className = "result-error";
+      importResults.innerHTML = `<strong>Import failed</strong><br />${msg.error}`;
+      importSubmitBtn.disabled = false;
+      return;
+    }
 
-    importResults.classList.remove("hidden");
-    importResults.className = "";
-    importResults.innerHTML = results
-      .map((r) => {
-        const isOk = r.status === "ok";
-        const cssClass = isOk ? "import-result-ok" : "import-result-fail";
-        const icon = isOk ? "\u2714" : "\u2718";
+    // Per-server result
+    received++;
+    if (msg.status === "ok") ok++;
+    else failed++;
 
-        const stepLabels = [
-          ["netbox_device_created", "Netbox device"],
-          ["netbox_interface_created", "Netbox interface"],
-          ["secret_stored", "OpenBao secret"],
-          ["ipmi_ip_assigned", "Kea DHCP"],
-          ["ironic_node_created", "Metal3 BMH"],
-        ];
-        const stepBadges = stepLabels
-          .map(([key, label]) => {
-            const done = r.steps[key];
-            return `<span class="step-badge ${done ? "done" : "skip"}">${label}</span>`;
-          })
-          .join(" ");
+    importProgressFill.style.width = `${(received / total) * 100}%`;
+    importProgressText.textContent = `${received} / ${total} — ${ok} ok, ${failed} failed`;
+    importResults.insertAdjacentHTML("beforeend", renderImportResult(msg));
+  };
 
-        const warningHtml = r.warnings.length
-          ? `<div class="result-warnings">${r.warnings.join("<br/>")}</div>`
-          : "";
-        const errorHtml = r.error
-          ? `<div class="result-error-text">${r.error}</div>`
-          : "";
-
-        return `<div class="${cssClass}">
-          <strong>${icon} ${r.device_name}</strong>
-          ${r.ipmi_ip ? ` &mdash; ${r.ipmi_ip}` : ""}
-          <div class="step-badges">${stepBadges}</div>
-          ${warningHtml}${errorHtml}
-        </div>`;
-      })
-      .join("");
-  } catch (err) {
+  ws.onerror = () => {
     importProgressFill.style.width = "100%";
     importProgressFill.style.background = "var(--error)";
     importProgressText.textContent = "";
-    importResults.classList.remove("hidden");
     importResults.className = "result-error";
-    importResults.innerHTML = `<strong>Import failed</strong><br />${err.message}`;
-  } finally {
+    importResults.innerHTML = `<strong>Import failed</strong><br />WebSocket connection error`;
     importSubmitBtn.disabled = false;
-  }
+  };
+
+  ws.onclose = (event) => {
+    if (!event.wasClean && received === 0) {
+      importProgressFill.style.width = "100%";
+      importProgressFill.style.background = "var(--error)";
+      importProgressText.textContent = "";
+      importResults.className = "result-error";
+      importResults.innerHTML = `<strong>Import failed</strong><br />Connection closed unexpectedly`;
+    }
+    importSubmitBtn.disabled = false;
+  };
 });
 
 // ── Navigation wiring ──────────────────────────────────────────────────

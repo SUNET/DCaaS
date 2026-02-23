@@ -229,6 +229,54 @@ class TestImport:
         assert data[1]["error"] == "Connection refused"
 
 
+class TestImportWebSocket:
+    @patch("app.main.import_server", new_callable=AsyncMock)
+    def test_ws_streams_results(self, mock_import, client):
+        from app.models import ImportResultItem, RegistrationSteps
+
+        mock_import.side_effect = [
+            ImportResultItem(
+                device_name="server1",
+                status="ok",
+                steps=RegistrationSteps(secret_stored=True),
+                ipmi_ip="10.0.0.1",
+            ),
+            ImportResultItem(
+                device_name="server2",
+                status="failed",
+                steps=RegistrationSteps(),
+                error="Connection refused",
+            ),
+        ]
+
+        with client.websocket_connect("/api/v1/servers/import/ws") as ws:
+            ws.send_json([
+                {"device_name": "server1", "bmc_mac": "AABBCCDDEEFF", "ipmi_password": "p1"},
+                {"device_name": "server2", "bmc_mac": "112233445566", "ipmi_password": "p2"},
+            ])
+
+            results = []
+            for _ in range(2):
+                results.append(ws.receive_json())
+
+            done = ws.receive_json()
+            assert done == {"done": True}
+
+        names = {r["device_name"] for r in results}
+        assert names == {"server1", "server2"}
+        assert any(r["status"] == "ok" for r in results)
+        assert any(r["status"] == "failed" for r in results)
+
+    def test_ws_validation_error(self, client):
+        with client.websocket_connect("/api/v1/servers/import/ws") as ws:
+            ws.send_json([
+                {"device_name": "test", "bmc_mac": "invalid", "ipmi_password": "p1"},
+            ])
+
+            msg = ws.receive_json()
+            assert "error" in msg
+
+
 class TestServerStatus:
     def test_not_found(self, client):
         resp = client.get("/api/v1/servers/nonexistent/status")
