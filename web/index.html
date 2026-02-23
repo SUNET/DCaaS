@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#1a1a2e" />
+    <meta name="theme-color" content="#1d1c1a" />
     <title>DCaaS Server Onboarding</title>
     <link rel="manifest" href="/manifest.json" />
     <link rel="stylesheet" href="/src/styles/app.css" />
@@ -11,7 +11,10 @@
   <body>
     <div id="app">
       <header>
-        <h1>Server Onboarding</h1>
+        <div style="display:flex;align-items:center">
+          <img src="/sunet-logo.svg" alt="SUNET" class="header-logo" />
+          <h1>Server Onboarding</h1>
+        </div>
         <div class="header-right">
           <span id="user-name" class="user-name hidden"></span>
           <button id="logout-btn" class="nav-btn hidden" title="Sign out">Sign out</button>
@@ -20,10 +23,11 @@
       </header>
       <main>
         <!-- Login screen -->
-        <section id="login-screen" class="step active">
+        <section id="login-screen" class="step active" style="text-align:center;padding-top:60px">
+          <img src="/sunet-logo-dark.svg" alt="SUNET" style="height:64px;margin-bottom:24px" />
           <h2>DCaaS Server Onboarding</h2>
           <p class="hint">Sign in to register servers.</p>
-          <a href="/auth/login" class="btn-primary" style="display:inline-block;text-align:center;text-decoration:none">Sign in</a>
+          <a href="/auth/login" class="btn-primary" style="display:inline-block;text-align:center;text-decoration:none;max-width:300px;margin:0 auto">Sign in</a>
         </section>
 
         <!-- Step 1: Barcode scanning -->
