@@ -90,6 +90,7 @@ async def callback(request: Request, code: str, state: str):
 
     tokens = resp.json()
     id_token = tokens.get("id_token")
+    access_token = tokens.get("access_token")
     if not id_token:
         return Response("No id_token in response", status_code=502)
 
@@ -110,6 +111,7 @@ async def callback(request: Request, code: str, state: str):
             algorithms=["RS256"],
             audience=settings.oidc_audience,
             issuer=settings.oidc_issuer,
+            access_token=access_token,
         )
     except JWTError as exc:
         logger.error("id_token validation failed: %s", exc)
