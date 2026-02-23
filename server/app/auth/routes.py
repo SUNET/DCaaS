@@ -52,6 +52,7 @@ async def login():
     response.set_cookie(
         STATE_COOKIE,
         state,
+        path="/",
         httponly=True,
         secure=True,
         samesite="lax",
@@ -124,12 +125,13 @@ async def callback(request: Request, code: str, state: str):
     response.set_cookie(
         SESSION_COOKIE,
         session_value,
+        path="/",
         httponly=True,
         secure=True,
         samesite="lax",
         max_age=SESSION_MAX_AGE,
     )
-    response.delete_cookie(STATE_COOKIE)
+    response.delete_cookie(STATE_COOKIE, path="/")
     return response
 
 
@@ -172,5 +174,5 @@ async def userinfo(request: Request):
 async def logout():
     """Clear the session cookie."""
     response = Response(status_code=200)
-    response.delete_cookie(SESSION_COOKIE)
+    response.delete_cookie(SESSION_COOKIE, path="/")
     return response
