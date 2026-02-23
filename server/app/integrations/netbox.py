@@ -132,12 +132,15 @@ class NetboxClient:
         ]
 
     def allocate_ipmi_ip(self, device_name: str, interface_id: int, ipmi_prefix: str) -> str:
-        """Allocate the next available IP from the given prefix and assign it to the BMC interface.
+        """Allocate the next available IP from the given prefix and assign it to the IPMI interface.
 
         Returns the allocated IP address (without prefix length).
         """
         existing = list(
-            self.api.ipam.ip_addresses.filter(interface_id=interface_id)
+            self.api.ipam.ip_addresses.filter(
+                assigned_object_type="dcim.interface",
+                assigned_object_id=interface_id,
+            )
         )
         if existing:
             ip = str(existing[0].address).split("/")[0]
@@ -150,7 +153,7 @@ class NetboxClient:
 
         available = prefix.available_ips.create(
             {
-                "description": f"{device_name} BMC",
+                "description": f"{device_name} IPMI",
                 "assigned_object_type": "dcim.interface",
                 "assigned_object_id": interface_id,
             }
