@@ -4,6 +4,7 @@
 
 import {
   registerServer,
+  importServers,
   listServers,
   getSites,
   getLocations,
@@ -694,6 +695,96 @@ function renderImportResult(r) {
   </div>`;
 }
 
+function importShowDone(ok, failed) {
+  importProgressFill.style.width = "100%";
+  if (failed > 0) {
+    importProgressFill.style.background = "var(--warning)";
+  }
+  importProgressText.textContent = `Done: ${ok} succeeded, ${failed} failed`;
+  importSubmitBtn.disabled = false;
+}
+
+function importShowError(message) {
+  importProgressFill.style.width = "100%";
+  importProgressFill.style.background = "var(--error)";
+  importProgressText.textContent = "";
+  importResults.className = "result-error";
+  importResults.innerHTML = `<strong>Import failed</strong><br />${message}`;
+  importSubmitBtn.disabled = false;
+}
+
+function importViaWebSocket(data) {
+  const total = data.length;
+  let received = 0;
+  let ok = 0;
+  let failed = 0;
+
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  const ws = new WebSocket(`${proto}//${location.host}/api/v1/servers/import/ws`);
+
+  ws.onopen = () => {
+    ws.send(JSON.stringify(data));
+  };
+
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+
+    if (msg.done) {
+      importShowDone(ok, failed);
+      return;
+    }
+
+    if (msg.error && !msg.device_name) {
+      importShowError(msg.error);
+      return;
+    }
+
+    received++;
+    if (msg.status === "ok") ok++;
+    else failed++;
+
+    importProgressFill.style.width = `${(received / total) * 100}%`;
+    importProgressText.textContent = `${received} / ${total} — ${ok} ok, ${failed} failed`;
+    importResults.insertAdjacentHTML("beforeend", renderImportResult(msg));
+  };
+
+  ws.onerror = () => {
+    if (received > 0) {
+      importShowError("WebSocket connection lost");
+      return;
+    }
+    // WebSocket never connected — fall back to REST
+    console.warn("WebSocket failed, falling back to REST import");
+    importViaREST(data);
+  };
+
+  ws.onclose = (event) => {
+    if (!event.wasClean && received === 0) {
+      // Connection rejected — fall back handled by onerror
+    }
+    importSubmitBtn.disabled = false;
+  };
+}
+
+async function importViaREST(data) {
+  const total = data.length;
+  try {
+    const results = await importServers(data);
+    let ok = 0;
+    let failed = 0;
+    results.forEach((r, i) => {
+      if (r.status === "ok") ok++;
+      else failed++;
+      importProgressFill.style.width = `${((i + 1) / total) * 100}%`;
+      importProgressText.textContent = `${i + 1} / ${total} — ${ok} ok, ${failed} failed`;
+      importResults.insertAdjacentHTML("beforeend", renderImportResult(r));
+    });
+    importShowDone(ok, failed);
+  } catch (err) {
+    importShowError(err.message);
+  }
+}
+
 importSubmitBtn.addEventListener("click", () => {
   if (!importData) return;
 
@@ -706,71 +797,7 @@ importSubmitBtn.addEventListener("click", () => {
   importProgressFill.style.background = "";
   importProgressText.textContent = `Importing ${importData.length} servers...`;
 
-  const total = importData.length;
-  let received = 0;
-  let ok = 0;
-  let failed = 0;
-
-  const proto = location.protocol === "https:" ? "wss:" : "ws:";
-  const ws = new WebSocket(`${proto}//${location.host}/api/v1/servers/import/ws`);
-
-  ws.onopen = () => {
-    ws.send(JSON.stringify(importData));
-  };
-
-  ws.onmessage = (event) => {
-    const msg = JSON.parse(event.data);
-
-    if (msg.done) {
-      importProgressFill.style.width = "100%";
-      if (failed > 0) {
-        importProgressFill.style.background = "var(--warning)";
-      }
-      importProgressText.textContent = `Done: ${ok} succeeded, ${failed} failed`;
-      importSubmitBtn.disabled = false;
-      return;
-    }
-
-    if (msg.error && !msg.device_name) {
-      // Validation error from server
-      importProgressFill.style.width = "100%";
-      importProgressFill.style.background = "var(--error)";
-      importProgressText.textContent = "";
-      importResults.className = "result-error";
-      importResults.innerHTML = `<strong>Import failed</strong><br />${msg.error}`;
-      importSubmitBtn.disabled = false;
-      return;
-    }
-
-    // Per-server result
-    received++;
-    if (msg.status === "ok") ok++;
-    else failed++;
-
-    importProgressFill.style.width = `${(received / total) * 100}%`;
-    importProgressText.textContent = `${received} / ${total} — ${ok} ok, ${failed} failed`;
-    importResults.insertAdjacentHTML("beforeend", renderImportResult(msg));
-  };
-
-  ws.onerror = () => {
-    importProgressFill.style.width = "100%";
-    importProgressFill.style.background = "var(--error)";
-    importProgressText.textContent = "";
-    importResults.className = "result-error";
-    importResults.innerHTML = `<strong>Import failed</strong><br />WebSocket connection error`;
-    importSubmitBtn.disabled = false;
-  };
-
-  ws.onclose = (event) => {
-    if (!event.wasClean && received === 0) {
-      importProgressFill.style.width = "100%";
-      importProgressFill.style.background = "var(--error)";
-      importProgressText.textContent = "";
-      importResults.className = "result-error";
-      importResults.innerHTML = `<strong>Import failed</strong><br />Connection closed unexpectedly`;
-    }
-    importSubmitBtn.disabled = false;
-  };
+  importViaWebSocket(importData);
 });
 
 // ── Navigation wiring ──────────────────────────────────────────────────
