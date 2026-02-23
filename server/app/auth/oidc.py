@@ -106,6 +106,10 @@ async def validate_token(request: Request) -> dict[str, Any]:
 
     # 2. Try session cookie
     cookie = request.cookies.get("onboarding_session")
+    if not cookie:
+        logger.debug("No session cookie present")
+    elif not settings.session_secret:
+        logger.warning("Session cookie found but no session_secret configured")
     if cookie and settings.session_secret:
         from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
@@ -117,9 +121,10 @@ async def validate_token(request: Request) -> dict[str, Any]:
                 claims = await _validate_jwt(id_token)
                 _check_authorization(claims)
                 return claims
-        except (BadSignature, SignatureExpired):
-            pass
+        except (BadSignature, SignatureExpired) as e:
+            logger.warning("Session cookie invalid: %s", e)
         except JWTError as e:
+            logger.warning("Session JWT validation failed: %s", e)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=f"Invalid session token: {e}",
