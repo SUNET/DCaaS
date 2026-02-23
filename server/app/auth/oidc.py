@@ -134,9 +134,10 @@ async def validate_token(request: Request) -> dict[str, Any]:
 
 def _check_authorization(claims: dict[str, Any]) -> None:
     """Enforce allowed-users list."""
-    if settings.allowed_users:
+    if settings.allowed_users.strip():
+        allowed = [u.strip() for u in settings.allowed_users.split(",") if u.strip()]
         sub = claims.get("sub", "")
-        if sub not in settings.allowed_users:
+        if sub not in allowed:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="User not in allowed-users list",

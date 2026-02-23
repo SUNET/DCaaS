@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     session_secret: str = ""
 
     # Allowed users (comma-separated list of OIDC 'sub' values)
-    allowed_users: list[str] = []
+    allowed_users: str = ""
 
     # Netbox
     netbox_url: str = ""
