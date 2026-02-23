@@ -18,7 +18,7 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter(tags=["auth"])
 
 SESSION_COOKIE = "onboarding_session"
 STATE_COOKIE = "oidc_state"
@@ -32,7 +32,7 @@ def _serializer() -> URLSafeTimedSerializer:
 # ── Login ────────────────────────────────────────────────────────────────
 
 
-@router.get("/login")
+@router.get("/auth/login")
 async def login():
     """Redirect the browser to the SATOSA authorization endpoint."""
     oidc_config = await _get_oidc_config()
@@ -135,7 +135,7 @@ async def callback(request: Request, code: str, state: str):
 # ── Userinfo ─────────────────────────────────────────────────────────────
 
 
-@router.get("/userinfo")
+@router.get("/auth/userinfo")
 async def userinfo(request: Request):
     """Return decoded claims from the session cookie."""
     cookie = request.cookies.get(SESSION_COOKIE)
@@ -167,7 +167,7 @@ async def userinfo(request: Request):
 # ── Logout ───────────────────────────────────────────────────────────────
 
 
-@router.post("/logout")
+@router.post("/auth/logout")
 async def logout():
     """Clear the session cookie."""
     response = Response(status_code=200)
