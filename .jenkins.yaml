@@ -5,9 +5,7 @@ triggers:
   cron: "@daily"
 script:
   - echo "Building DCaaS images"
-downstream:
-  - dcaas-api
-  - dcaas-web
+downstream: []
 
 extra_jobs:
   # FastAPI onboarding API server
