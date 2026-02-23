@@ -164,6 +164,12 @@
         <!-- Server list panel -->
         <section id="panel-servers" class="step">
           <h2>Registered Servers</h2>
+          <div class="filter-bar">
+            <select id="filter-site"><option value="">All datacenters</option></select>
+            <select id="filter-location"><option value="">All locations</option></select>
+            <select id="filter-device-type"><option value="">All device types</option></select>
+          </div>
+          <div id="server-count" class="server-count"></div>
           <div id="server-list" class="server-list">
             <p class="empty-state">No servers registered yet.</p>
           </div>

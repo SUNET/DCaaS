@@ -465,26 +465,66 @@ async function submitRegistration() {
 }
 
 // ── Server list ────────────────────────────────────────────────────────
+let allServers = [];
+
+const filterSite = $("#filter-site");
+const filterLocation = $("#filter-location");
+const filterDeviceType = $("#filter-device-type");
+
+function populateFilterOptions() {
+  const sites = [...new Set(allServers.map((s) => s.site).filter(Boolean))].sort();
+  const locations = [...new Set(allServers.map((s) => s.location).filter(Boolean))].sort();
+  const types = [...new Set(allServers.map((s) => s.device_type).filter(Boolean))].sort();
+
+  filterSite.innerHTML = '<option value="">All datacenters</option>' +
+    sites.map((v) => `<option value="${v}">${v}</option>`).join("");
+  filterLocation.innerHTML = '<option value="">All locations</option>' +
+    locations.map((v) => `<option value="${v}">${v}</option>`).join("");
+  filterDeviceType.innerHTML = '<option value="">All device types</option>' +
+    types.map((v) => `<option value="${v}">${v}</option>`).join("");
+}
+
+function renderServerList() {
+  const container = $("#server-list");
+  const countEl = $("#server-count");
+  const sf = filterSite.value;
+  const lf = filterLocation.value;
+  const tf = filterDeviceType.value;
+
+  const filtered = allServers.filter(
+    (s) => (!sf || s.site === sf) && (!lf || s.location === lf) && (!tf || s.device_type === tf)
+  );
+
+  countEl.textContent = `${filtered.length} of ${allServers.length} servers`;
+
+  if (filtered.length === 0) {
+    container.innerHTML = '<p class="empty-state">No servers match the selected filters.</p>';
+    return;
+  }
+  container.innerHTML = filtered
+    .map(
+      (s) => `
+    <div class="server-card">
+      <h3>${s.name}</h3>
+      <span class="status-badge ${s.status}">${s.status}</span>
+      <p class="meta">${s.location} / ${s.rack} / U${s.position || "?"}
+        &mdash; ${s.device_role}
+        &mdash; ${s.created ? new Date(s.created).toLocaleDateString() : ""}</p>
+    </div>`
+    )
+    .join("");
+}
+
+filterSite.addEventListener("change", renderServerList);
+filterLocation.addEventListener("change", renderServerList);
+filterDeviceType.addEventListener("change", renderServerList);
+
 async function loadServerList() {
   const container = $("#server-list");
   try {
-    const servers = await listServers();
-    if (servers.length === 0) {
-      container.innerHTML = '<p class="empty-state">No servers registered yet.</p>';
-      return;
-    }
-    container.innerHTML = servers
-      .map(
-        (s) => `
-      <div class="server-card">
-        <h3>${s.name}</h3>
-        <span class="status-badge ${s.status}">${s.status}</span>
-        <p class="meta">${s.location} / ${s.rack} / U${s.position || "?"}
-          &mdash; ${s.device_role}
-          &mdash; ${s.created ? new Date(s.created).toLocaleDateString() : ""}</p>
-      </div>`
-      )
-      .join("");
+    allServers = await listServers();
+    populateFilterOptions();
+    renderServerList();
   } catch (err) {
     container.innerHTML = `<p class="empty-state">Failed to load servers: ${err.message}</p>`;
   }
