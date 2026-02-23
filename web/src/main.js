@@ -63,6 +63,20 @@ function updateScanNextButton() {
   $("#next-to-location").disabled = !(state.mac && state.password);
 }
 
+function resetScanFields() {
+  state.mac = "";
+  state.password = "";
+  state.position = null;
+  macInput.value = "";
+  macInput.classList.remove("valid");
+  $("#clear-mac").classList.add("hidden");
+  passwordInput.value = "";
+  passwordInput.classList.remove("valid");
+  $("#clear-password").classList.add("hidden");
+  positionInput.value = "";
+  updateScanNextButton();
+}
+
 function handleScanResult(result) {
   // When the user chose a specific field, only accept barcodes that match.
   // This handles the case where both barcodes are visible in the camera —
@@ -100,8 +114,13 @@ function stopCamera() {
   cameraContainer.classList.add("hidden");
 }
 
+function dismissBanner() {
+  $("#success-banner").classList.add("hidden");
+}
+
 // Manual input handlers
 macInput.addEventListener("input", () => {
+  dismissBanner();
   const cleaned = macInput.value.replace(/[:\- ]/g, "");
   if (/^[0-9A-Fa-f]{12}$/.test(cleaned)) {
     state.mac = cleaned.toUpperCase();
@@ -115,6 +134,7 @@ macInput.addEventListener("input", () => {
 });
 
 passwordInput.addEventListener("input", () => {
+  dismissBanner();
   state.password = passwordInput.value;
   if (state.password) {
     passwordInput.classList.add("valid");
@@ -421,18 +441,18 @@ async function submitRegistration() {
     });
     progressFill.style.width = `${(completed / WORKFLOW_STEPS.length) * 100}%`;
 
-    resultDiv.classList.remove("hidden");
-    resultDiv.className = "result-success";
-    const warningsHtml = result.warnings && result.warnings.length
-      ? `<div class="result-warnings">${result.warnings.map((w) => `<p>&#x26A0; ${w}</p>`).join("")}</div>`
-      : "";
-    resultDiv.innerHTML = `
-      <strong>Server registered successfully</strong><br />
-      Device: <code>${result.device_name}</code><br />
-      IPMI IP: <code>${result.ipmi_ip || "N/A"}</code><br />
-      Netbox ID: <code>${result.netbox_id || "N/A"}</code>
-      ${warningsHtml}
+    // Success — redirect back to scan with a banner
+    resetScanFields();
+    const banner = $("#success-banner");
+    banner.innerHTML = `
+      &#x2714; Registered <code>${result.device_name}</code>
+      <div class="banner-details">
+        IPMI IP: ${result.ipmi_ip || "N/A"} &middot; Netbox ID: ${result.netbox_id || "N/A"}
+      </div>
     `;
+    banner.classList.remove("hidden");
+    showStep("scan");
+    return;
   } catch (err) {
     resultDiv.classList.remove("hidden");
     resultDiv.className = "result-error";
