@@ -27,6 +27,7 @@ class RegisterServerRequest(BaseModel):
     device_type: str = Field(..., description="Netbox device type slug")
     device_role: str = Field(..., description="Netbox device role slug")
     ipmi_prefix: str = Field(..., description="IPMI subnet prefix (e.g. 10.16.28.0/24)")
+    tenant: str = Field("", description="Netbox tenant slug for IP address allocation")
 
     @field_validator("bmc_mac")
     @classmethod
@@ -122,6 +123,11 @@ class PrefixRef(BaseModel):
     description: str
 
 
+class TenantRef(BaseModel):
+    slug: str
+    name: str
+
+
 class ImportServerItem(BaseModel):
     device_name: str
     bmc_mac: str = Field(..., description="BMC MAC address as 12 hex characters")
@@ -134,6 +140,7 @@ class ImportServerItem(BaseModel):
     device_type: str | None = None
     device_role: str | None = None
     ipmi_prefix: str | None = None
+    tenant: str | None = None
 
     @field_validator("bmc_mac")
     @classmethod

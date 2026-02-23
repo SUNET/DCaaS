@@ -78,7 +78,7 @@ async def register_server(req: RegisterServerRequest) -> RegisterServerResponse:
         steps.secret_stored = True
 
         # Step 4: Allocate IPMI IP from Netbox IPAM and push DHCP reservation to Kea
-        ipmi_ip, ip_created = netbox.allocate_ipmi_ip(device_name, interface_id, req.ipmi_prefix)
+        ipmi_ip, ip_created = netbox.allocate_ipmi_ip(device_name, interface_id, req.ipmi_prefix, req.tenant)
 
         if ipmi_ip:
             kea = KeaClient()
@@ -197,6 +197,7 @@ async def import_server(item: ImportServerItem) -> ImportResultItem:
             if item.ipmi_prefix and not ipmi_ip:
                 allocated_ip, ip_created = netbox.allocate_ipmi_ip(
                     item.device_name, interface_id, item.ipmi_prefix,
+                    item.tenant or "",
                 )
                 if allocated_ip:
                     ipmi_ip = allocated_ip

@@ -150,7 +150,14 @@ class NetboxClient:
             for p in self.api.ipam.prefixes.filter(role="ipmi")
         ]
 
-    def allocate_ipmi_ip(self, device_name: str, interface_id: int, ipmi_prefix: str) -> tuple[str | None, bool]:
+    def get_tenants(self) -> list[dict]:
+        """List all tenants."""
+        return [
+            {"slug": t.slug, "name": t.name}
+            for t in self.api.tenancy.tenants.all()
+        ]
+
+    def allocate_ipmi_ip(self, device_name: str, interface_id: int, ipmi_prefix: str, tenant: str = "") -> tuple[str | None, bool]:
         """Allocate the next available IP from the given prefix and assign it to the IPMI interface.
 
         Returns (ip_address, created). If the IP already exists, created is False.
@@ -178,13 +185,14 @@ class NetboxClient:
         if prefix is None:
             raise ValueError(f"IPMI prefix '{ipmi_prefix}' not found in Netbox")
 
-        available = prefix.available_ips.create(
-            {
-                "description": f"{device_name} IPMI",
-                "assigned_object_type": "dcim.interface",
-                "assigned_object_id": interface_id,
-            }
-        )
+        ip_data = {
+            "description": f"{device_name} IPMI",
+            "assigned_object_type": "dcim.interface",
+            "assigned_object_id": interface_id,
+        }
+        if tenant:
+            ip_data["tenant"] = {"slug": tenant}
+        available = prefix.available_ips.create(ip_data)
         ip = str(available.address).split("/")[0]
         logger.info("Allocated IP %s for %s", ip, device_name)
         return ip, True

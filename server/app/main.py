@@ -26,6 +26,7 @@ from app.models import (
     ServerListItem,
     ServerStatusResponse,
     SiteRef,
+    TenantRef,
 )
 from app.workflow import get_server_status, import_server, register_server
 
@@ -302,4 +303,12 @@ async def ref_prefixes(_claims: dict[str, Any] = Depends(validate_token)):
     key = "prefixes"
     if key not in _ref_cache:
         _ref_cache[key] = _netbox().get_prefixes()
+    return _ref_cache[key]
+
+
+@app.get("/api/v1/reference/tenants", response_model=list[TenantRef])
+async def ref_tenants(_claims: dict[str, Any] = Depends(validate_token)):
+    key = "tenants"
+    if key not in _ref_cache:
+        _ref_cache[key] = _netbox().get_tenants()
     return _ref_cache[key]

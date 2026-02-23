@@ -69,3 +69,7 @@ export function getDeviceRoles() {
 export function getPrefixes() {
   return request("GET", "/reference/prefixes");
 }
+
+export function getTenants() {
+  return request("GET", "/reference/tenants");
+}

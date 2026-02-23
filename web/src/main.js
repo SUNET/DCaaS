@@ -11,6 +11,7 @@ import {
   getDeviceTypes,
   getDeviceRoles,
   getPrefixes,
+  getTenants,
 } from "./services/api.js";
 import { startScanner, classifyBarcode, formatMac } from "./services/scanner.js";
 
@@ -25,6 +26,7 @@ const state = {
   deviceType: "",
   deviceRole: "",
   ipmiPrefix: "",
+  tenant: "",
 };
 
 // Remember last-used location across scans
@@ -32,6 +34,7 @@ const remembered = {
   site: localStorage.getItem("last_site") || "",
   location: localStorage.getItem("last_location") || "",
   rack: localStorage.getItem("last_rack") || "",
+  tenant: localStorage.getItem("last_tenant") || "",
 };
 
 let activeScanner = null;
@@ -179,6 +182,7 @@ const positionInput = $("#position-input");
 const deviceTypeSelect = $("#device-type-select");
 const deviceRoleSelect = $("#device-role-select");
 const prefixSelect = $("#prefix-select");
+const tenantSelect = $("#tenant-select");
 
 function updateLocationNextButton() {
   const ready =
@@ -188,7 +192,8 @@ function updateLocationNextButton() {
     state.position &&
     state.deviceType &&
     state.deviceRole &&
-    state.ipmiPrefix;
+    state.ipmiPrefix &&
+    state.tenant;
   $("#next-to-review").disabled = !ready;
 }
 
@@ -309,6 +314,28 @@ async function loadPrefixes() {
   }
 }
 
+async function loadTenants() {
+  try {
+    const tenants = await getTenants();
+    tenantSelect.innerHTML = '<option value="">Select tenant...</option>';
+    tenants.forEach((t) => {
+      const opt = document.createElement("option");
+      opt.value = t.slug;
+      opt.textContent = t.name;
+      tenantSelect.appendChild(opt);
+    });
+
+    if (remembered.tenant) {
+      tenantSelect.value = remembered.tenant;
+      if (tenantSelect.value) {
+        state.tenant = remembered.tenant;
+      }
+    }
+  } catch (err) {
+    console.error("Failed to load tenants:", err);
+  }
+}
+
 siteSelect.addEventListener("change", async () => {
   state.site = siteSelect.value;
   state.location = "";
@@ -369,6 +396,15 @@ prefixSelect.addEventListener("change", () => {
   updateLocationNextButton();
 });
 
+tenantSelect.addEventListener("change", () => {
+  state.tenant = tenantSelect.value;
+  if (state.tenant) {
+    localStorage.setItem("last_tenant", state.tenant);
+    remembered.tenant = state.tenant;
+  }
+  updateLocationNextButton();
+});
+
 // ── Step 3: Review & Submit ────────────────────────────────────────────
 function buildReview() {
   const dl = $("#review-summary");
@@ -382,6 +418,7 @@ function buildReview() {
     ["Device Type", state.deviceType],
     ["Device Role", state.deviceRole],
     ["IPMI Prefix", state.ipmiPrefix],
+    ["Tenant", state.tenant],
     ["Device Name", `${state.location}-${state.rack.toLowerCase()}u${state.position}`],
   ];
 
@@ -425,6 +462,7 @@ async function submitRegistration() {
       device_type: state.deviceType,
       device_role: state.deviceRole,
       ipmi_prefix: state.ipmiPrefix,
+      tenant: state.tenant,
     });
 
     // Update step indicators from response
@@ -742,6 +780,7 @@ $("#next-to-location").addEventListener("click", () => {
   loadDeviceTypes();
   loadDeviceRoles();
   loadPrefixes();
+  loadTenants();
 });
 
 $("#back-to-scan").addEventListener("click", () => showStep("scan"));
