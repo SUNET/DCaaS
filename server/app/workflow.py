@@ -30,7 +30,7 @@ async def register_server(req: RegisterServerRequest) -> RegisterServerResponse:
 
     Steps:
     1. Generate device name
-    2. Create device in Netbox (with BMC interface)
+    2. Create device in Netbox (with IPMI interface)
     3. Store IPMI password in OpenBao
     4. Reserve IPMI IP in Kea DHCP
     5. Create Ironic/Metal3 bare metal node
@@ -45,7 +45,7 @@ async def register_server(req: RegisterServerRequest) -> RegisterServerResponse:
     warnings: list[str] = []
 
     try:
-        # Step 1+2: Create device and BMC interface in Netbox
+        # Step 1+2: Create device and IPMI interface in Netbox
         netbox = NetboxClient()
 
         netbox_id, device_created = netbox.create_device(
@@ -61,8 +61,10 @@ async def register_server(req: RegisterServerRequest) -> RegisterServerResponse:
         if not device_created:
             warnings.append(f"Device already exists in Netbox (ID {netbox_id}), skipping creation")
 
-        interface_id = netbox.create_bmc_interface(netbox_id, formatted_mac)
+        interface_id, iface_created = netbox.create_bmc_interface(netbox_id, formatted_mac)
         steps.netbox_interface_created = True
+        if not iface_created:
+            warnings.append("IPMI interface already exists, skipping creation")
 
         # Step 3: Store IPMI credentials in OpenBao
         openbao = OpenBaoClient()

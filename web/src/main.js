@@ -371,7 +371,7 @@ function buildReview() {
 
 const WORKFLOW_STEPS = [
   { key: "netbox_device_created", label: "Create device in Netbox" },
-  { key: "netbox_interface_created", label: "Create BMC interface" },
+  { key: "netbox_interface_created", label: "Create IPMI interface" },
   { key: "secret_stored", label: "Store credentials in OpenBao" },
   { key: "ipmi_ip_assigned", label: "Assign IPMI IP via Kea DHCP" },
   { key: "ironic_node_created", label: "Create Metal3 BareMetalHost" },

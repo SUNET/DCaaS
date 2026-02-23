@@ -106,23 +106,23 @@ class NetboxClient:
         logger.info("Created device %s with ID %d", name, device.id)
         return device.id, True
 
-    def create_bmc_interface(self, device_id: int, mac_address: str) -> int:
-        """Create a BMC interface on a device. Returns the interface ID."""
+    def create_bmc_interface(self, device_id: int, mac_address: str) -> tuple[int, bool]:
+        """Create an ipmi interface on a device. Returns (interface_id, created)."""
         existing = list(
-            self.api.dcim.interfaces.filter(device_id=device_id, name="BMC")
+            self.api.dcim.interfaces.filter(device_id=device_id, name="ipmi")
         )
         if existing:
-            logger.info("BMC interface already exists on device %d", device_id)
-            return existing[0].id
+            logger.info("ipmi interface already exists on device %d", device_id)
+            return existing[0].id, False
 
         iface = self.api.dcim.interfaces.create(
             device=device_id,
-            name="BMC",
+            name="ipmi",
             type="1000base-t",
             mac_address=mac_address,
         )
-        logger.info("Created BMC interface %d on device %d", iface.id, device_id)
-        return iface.id
+        logger.info("Created ipmi interface %d on device %d", iface.id, device_id)
+        return iface.id, True
 
     def get_prefixes(self) -> list[dict]:
         """List all prefixes with role 'ipmi'."""
