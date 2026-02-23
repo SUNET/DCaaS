@@ -131,21 +131,29 @@ class NetboxClient:
             for p in self.api.ipam.prefixes.filter(role="ipmi")
         ]
 
-    def allocate_ipmi_ip(self, device_name: str, interface_id: int, ipmi_prefix: str) -> str:
+    def allocate_ipmi_ip(self, device_name: str, interface_id: int, ipmi_prefix: str) -> tuple[str | None, bool]:
         """Allocate the next available IP from the given prefix and assign it to the IPMI interface.
 
-        Returns the allocated IP address (without prefix length).
+        Returns (ip_address, created). If the IP already exists, created is False.
+        Returns (None, False) if allocation fails due to permissions.
         """
-        existing = list(
-            self.api.ipam.ip_addresses.filter(
-                assigned_object_type="dcim.interface",
-                assigned_object_id=interface_id,
+        # Check if the interface already has IPs assigned
+        iface = self.api.dcim.interfaces.get(interface_id)
+        if iface and iface.count_ipaddresses and iface.count_ipaddresses > 0:
+            # Try to read the actual IP
+            existing = list(
+                self.api.ipam.ip_addresses.filter(interface_id=interface_id)
             )
-        )
-        if existing:
-            ip = str(existing[0].address).split("/")[0]
-            logger.info("IP %s already assigned to interface %d", ip, interface_id)
-            return ip
+            if existing:
+                ip = str(existing[0].address).split("/")[0]
+                logger.info("IP %s already assigned to interface %d", ip, interface_id)
+                return ip, False
+            # Interface has IPs but we can't read them (likely missing ipam.view_ipaddress)
+            logger.warning(
+                "Interface %d has %d IP(s) but token lacks read permission, skipping allocation",
+                interface_id, iface.count_ipaddresses,
+            )
+            return None, False
 
         prefix = self.api.ipam.prefixes.get(prefix=ipmi_prefix)
         if prefix is None:
@@ -160,7 +168,7 @@ class NetboxClient:
         )
         ip = str(available.address).split("/")[0]
         logger.info("Allocated IP %s for %s", ip, device_name)
-        return ip
+        return ip, True
 
     def update_device_status(self, device_id: int, status: str) -> None:
         """Update a device's status in Netbox."""

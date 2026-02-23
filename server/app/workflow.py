@@ -76,15 +76,21 @@ async def register_server(req: RegisterServerRequest) -> RegisterServerResponse:
         steps.secret_stored = True
 
         # Step 4: Allocate IPMI IP from Netbox IPAM and push DHCP reservation to Kea
-        ipmi_ip = netbox.allocate_ipmi_ip(device_name, interface_id, req.ipmi_prefix)
+        ipmi_ip, ip_created = netbox.allocate_ipmi_ip(device_name, interface_id, req.ipmi_prefix)
 
-        kea = KeaClient()
-        await kea.add_reservation(
-            mac_address=formatted_mac,
-            ip_address=ipmi_ip,
-            hostname=f"{device_name}-bmc",
-        )
-        steps.ipmi_ip_assigned = True
+        if ipmi_ip:
+            kea = KeaClient()
+            await kea.add_reservation(
+                mac_address=formatted_mac,
+                ip_address=ipmi_ip,
+                hostname=f"{device_name}-bmc",
+            )
+            steps.ipmi_ip_assigned = True
+            if not ip_created:
+                warnings.append(f"IPMI IP {ipmi_ip} already assigned, skipping allocation")
+        else:
+            warnings.append("IPMI IP already assigned in Netbox but could not be read (check token permissions)")
+            steps.ipmi_ip_assigned = True  # not failed, just pre-existing
 
         # Step 5: Create Ironic/Metal3 bare metal node
         metal3 = Metal3Client()
