@@ -106,6 +106,95 @@ The API server is configured via environment variables (prefix `ONBOARDING_`):
 
 Device names are auto-generated: `{site}-{rack}u{position}` (e.g., `dcoa-rb06u31`).
 
+## JSON Import
+
+Servers can be bulk-imported via `POST /api/v1/servers/import` (or streamed via WebSocket at `/api/v1/servers/import/ws`). The endpoint accepts a JSON array of server objects.
+
+### JSON Format
+
+```json
+[
+  {
+    "device_name": "dcoa-ra07u45",
+    "bmc_mac": "3CECEFA19CE8",
+    "bmc_password": "secret123",
+    "bmc_ip": "10.16.28.78",
+    "site": "dcoa",
+    "location": "ra07",
+    "rack": "RA07",
+    "position": 45,
+    "device_type": "supermicro-1u",
+    "device_role": "k8s-worker",
+    "bmc_prefix": "10.16.28.0/24",
+    "tenant": ""
+  }
+]
+```
+
+**Required fields:**
+
+| Field | Description |
+|-------|-------------|
+| `device_name` | Server name (e.g., `dcoa-ra07u45`) |
+| `bmc_mac` | BMC MAC address — hex (`3CECEFA19CE8`), colon-separated, or hyphen-separated |
+| `bmc_password` | BMC login password |
+
+**Optional fields (Netbox integration):**
+
+| Field | Description |
+|-------|-------------|
+| `site` | Netbox site slug |
+| `location` | Netbox location slug |
+| `rack` | Rack name |
+| `position` | Rack U position (integer) |
+| `device_type` | Netbox device type slug |
+| `device_role` | Netbox device role slug |
+| `bmc_prefix` | IPAM prefix for BMC IP allocation (e.g., `10.16.28.0/24`) |
+| `tenant` | Netbox tenant slug |
+| `bmc_ip` | Pre-assigned BMC IP (skips Netbox IPAM allocation) |
+
+### Workflow Steps
+
+Each server is processed independently — one failure does not stop others.
+
+1. **Netbox** (conditional) — Creates device + BMC interface, allocates IP from IPAM. Runs only if all Netbox fields (`site`, `location`, `rack`, `position`, `device_type`, `device_role`) are provided; otherwise skipped with a warning.
+2. **OpenBao** (always) — Stores BMC credentials at `secret/data/bmc/{device_name}`.
+3. **Kea DHCP** (conditional) — Creates DHCP reservation with hostname `{device_name}-bmc`. Runs only if a `bmc_ip` is available (explicitly provided or allocated from Netbox).
+4. **Metal3** (conditional) — Creates `BareMetalHost` CRD + BMC Secret. Runs only if a `bmc_ip` is available.
+
+All steps are idempotent — safe to re-import the same servers.
+
+### Minimal Import Example
+
+If you only have MAC, password, and IP (no Netbox):
+
+```json
+[
+  {
+    "device_name": "dcoa-ra07u45",
+    "bmc_mac": "3CECEFA19CE8",
+    "bmc_password": "secret123",
+    "bmc_ip": "10.16.28.78"
+  }
+]
+```
+
+### Merge Script
+
+`scripts/merge-import.py` merges a YAML device list with Kea's JSON reservation file to produce import JSON:
+
+```bash
+./scripts/merge-import.py servers.yaml bmc-reservations.json > import.json
+```
+
+The YAML file lists device names and passwords:
+```yaml
+- device_name: ra07u01
+  bmc_password: secret123
+```
+
+The Kea JSON file provides MAC and IP data. The script matches by hostname and outputs a merged JSON array ready for import.
+
 ## Kea DHCP Migration (TODO)
 
 The Kubernetes Kea deployment (`k8s/kea-dhcp.yaml`) currently handles BMC/IPMI DHCP reservations only. To fully replace the existing DHCP server on `internal-dco-test-kvmhost-1.platform.sunet.se`, the following gaps need to be addressed:
