@@ -106,6 +106,44 @@ The API server is configured via environment variables (prefix `ONBOARDING_`):
 
 Device names are auto-generated: `{site}-{rack}u{position}` (e.g., `dcoa-rb06u31`).
 
+## Kea DHCP Migration (TODO)
+
+The Kubernetes Kea deployment (`k8s/kea-dhcp.yaml`) currently handles BMC/IPMI DHCP reservations only. To fully replace the existing DHCP server on `internal-dco-test-kvmhost-1.platform.sunet.se`, the following gaps need to be addressed:
+
+### Current K8s Kea Config
+
+- Single subnet: `10.16.28.0/24` (IPMI/BMC), reservation-only (no pools)
+- Single interface: `bond0.4002`
+- PostgreSQL backend with `libdhcp_host_cmds.so` for API-driven reservations
+- HTTP control socket on port 8000
+
+### What the KVM Host Kea Has (that K8s Kea Lacks)
+
+**PXE Boot Subnet** — Second subnet `172.16.0.0/22` on a separate interface (`eno3` on the KVM host), with:
+- Pool: `172.16.0.11 - 172.16.3.200`
+- `next-server: 172.16.0.10`
+- Client classes for UEFI PXE (`netboot.xyz.efi`), BIOS PXE (`netboot.xyz.kpxe`), and UEFI HTTP boot
+- NTP server option: `10.16.28.10`
+
+**DHCP Pools** — Both subnets have dynamic pools:
+- IPMI: `10.16.28.11 - 10.16.28.200`
+- PXE: `172.16.0.11 - 172.16.3.200`
+
+**DHCP Options** — Missing from K8s config:
+- DNS servers: `89.32.32.32, 8.8.8.8`
+- Domain search: `platform.sunet.se, sunet.se`
+- Router/gateway per subnet (`10.16.28.1` and `172.16.0.1`)
+
+**Existing Reservations** — The KVM host uses JSON include files (`bmc-reservations.json`, `pxe-reservations.json`) that need to be migrated into the PostgreSQL database.
+
+### Migration Steps
+
+1. **Network plumbing** — Ensure K8s nodes running Kea have access to both VLANs (IPMI and PXE). Identify the PXE VLAN interface name on K8s nodes (equivalent of `eno3`).
+2. **Update Kea config** — Add PXE subnet, pools, DHCP options, client classes, and second interface.
+3. **Migrate reservations** — Import existing reservations from JSON files into PostgreSQL (via Kea control API or direct DB inserts).
+4. **Switch IP helpers** — Configure switches to point DHCP relay (`ip helper-address`) to K8s node IPs instead of KVM host IP. This is the cutover moment.
+5. **Test** — Verify DHCP and PXE boot work from K8s Kea before decommissioning KVM host DHCP.
+
 ## License
 
 GNU Affero General Public License v3 — see [LICENSE](LICENSE).
