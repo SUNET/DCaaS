@@ -3,71 +3,104 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#1d1c1a" />
+    <meta name="theme-color" content="#ff4500" />
     <title>DCaaS Server Onboarding</title>
     <link rel="manifest" href="/manifest.json" />
+    <link rel="preload" href="/fonts/Inter-VariableFont_opsz_wght.ttf" as="font" type="font/ttf" crossorigin />
+    <link rel="preload" href="/fonts/Akkurat.ttf" as="font" type="font/ttf" crossorigin />
     <link rel="stylesheet" href="/src/styles/app.css" />
   </head>
   <body>
     <div id="app">
-      <header>
-        <div style="display:flex;align-items:center">
+      <!-- Login screen — shown before authentication -->
+      <section id="login-screen" class="step active">
+        <div class="login-logo">S</div>
+        <h2>Sign in to DCaaS</h2>
+        <p class="lead">Server onboarding for Sunet datacenters. Use your Sunet identity to continue.</p>
+        <a href="/auth/login" class="btn-primary">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="16" r="4"/><path d="M11 13l9-9M17 7l3 3"/></svg>
+          Sign in with Sunet
+        </a>
+        <div class="service-tag">A Sunet operations service</div>
+      </section>
+
+      <!-- Authenticated shell -->
+      <header id="app-header" class="hidden">
+        <div class="brand">
           <img src="/sunet-logo.svg" alt="SUNET" class="header-logo" />
-          <h1>Server Onboarding</h1>
+          <h1>DCaaS · Onboarding</h1>
         </div>
         <div class="header-right">
           <span id="user-name" class="user-name hidden"></span>
           <button id="logout-btn" class="nav-btn hidden" title="Sign out">&#x2715;</button>
-          <div class="nav-menu-wrap">
-            <button id="nav-menu-toggle" class="nav-btn" title="Menu">&#9776;</button>
-            <div id="nav-menu" class="nav-menu hidden">
-              <button id="nav-list" class="nav-menu-item">Registered Servers</button>
-              <button id="nav-import" class="nav-menu-item">Import Servers</button>
-            </div>
-          </div>
         </div>
       </header>
-      <main>
-        <!-- Login screen -->
-        <section id="login-screen" class="step active" style="text-align:center;padding-top:60px">
-          <img src="/sunet-logo-dark.svg" alt="SUNET" style="height:64px;margin-bottom:24px" />
-          <h2>DCaaS Server Onboarding</h2>
-          <p class="hint">Sign in to register servers.</p>
-          <a href="/auth/login" class="btn-primary" style="display:inline-block;text-align:center;text-decoration:none;max-width:300px;margin:0 auto">Sign in</a>
-        </section>
 
+      <main id="app-main" class="hidden">
         <!-- Step 1: Barcode scanning -->
         <section id="step-scan" class="step">
+          <div class="page-head">
+            <div class="eyebrow">Step 1 of 3</div>
+            <h2>Scan server</h2>
+            <p class="hint">Scan the two barcodes on the BMC pull-out tag.</p>
+          </div>
+
+          <!-- Active location strip — surfaces the last-used location -->
+          <div id="loc-ctx" class="loc-ctx hidden">
+            <svg class="pin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s7-8 7-13a7 7 0 1 0-14 0c0 5 7 13 7 13z"/><circle cx="12" cy="9" r="2.5"/></svg>
+            <span>Registering to</span>
+            <strong id="loc-ctx-site">—</strong>
+            <span>·</span>
+            <strong id="loc-ctx-rack">—</strong>
+            <button id="loc-ctx-edit" class="edit" type="button">Change</button>
+          </div>
+
           <div id="success-banner" class="success-banner hidden"></div>
-          <h2>Scan Server Barcodes</h2>
-          <p class="hint">Scan the two barcodes on the BMC pull-out tag (in any order).</p>
 
           <div class="scan-fields">
             <div class="scan-field" id="mac-field">
-              <label>BMC MAC Address</label>
+              <label>
+                <span>BMC MAC Address</span>
+                <span class="hint" id="mac-hint">Scan or type</span>
+              </label>
               <div class="scan-value">
                 <input
                   type="text"
                   id="mac-input"
-                  placeholder="Scan or type MAC..."
+                  placeholder="— : — : — : — : — : —"
                   pattern="[0-9A-Fa-f:]{12,17}"
                 />
-                <button id="scan-mac" class="btn-scan" title="Scan barcode">&#x1F4F7;</button>
-                <button id="clear-mac" class="btn-clear hidden" title="Clear">&times;</button>
+                <button id="scan-mac" class="btn-scan" title="Scan barcode" type="button">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M21 7V5a2 2 0 0 0-2-2h-2M3 17v2a2 2 0 0 0 2 2h2M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M3 12h18"/></svg>
+                </button>
+                <button id="clear-mac" class="btn-clear hidden" title="Clear" type="button">&times;</button>
+              </div>
+              <div class="check-badge" aria-hidden="true">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
               </div>
             </div>
 
             <div class="scan-field" id="password-field">
-              <label>BMC Password</label>
+              <label>
+                <span>BMC Password</span>
+                <span class="hint" id="pw-hint">Scan or type</span>
+              </label>
               <div class="scan-value">
                 <input
                   type="password"
                   id="password-input"
-                  placeholder="Scan or type password..."
+                  placeholder="••••••••••••"
                 />
-                <button id="toggle-password" class="btn-toggle" title="Show/hide">&#x1F441;</button>
-                <button id="scan-password" class="btn-scan" title="Scan barcode">&#x1F4F7;</button>
-                <button id="clear-password" class="btn-clear hidden" title="Clear">&times;</button>
+                <button id="toggle-password" class="btn-toggle" title="Show/hide" type="button">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="2.5"/></svg>
+                </button>
+                <button id="scan-password" class="btn-scan" title="Scan barcode" type="button">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M21 7V5a2 2 0 0 0-2-2h-2M3 17v2a2 2 0 0 0 2 2h2M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M3 12h18"/></svg>
+                </button>
+                <button id="clear-password" class="btn-clear hidden" title="Clear" type="button">&times;</button>
+              </div>
+              <div class="check-badge" aria-hidden="true">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
               </div>
             </div>
           </div>
@@ -75,22 +108,32 @@
           <!-- Camera view (shown during scanning) -->
           <div id="camera-container" class="hidden">
             <video id="camera-preview" autoplay playsinline></video>
-            <button id="cancel-scan" class="btn-secondary">Cancel</button>
+            <button id="cancel-scan" class="btn-secondary" type="button">Cancel</button>
           </div>
 
-          <button id="next-to-location" class="btn-primary" disabled>
-            Next: Set Location
-          </button>
+          <div class="btn-row">
+            <button id="next-to-location" class="btn-primary" disabled type="button">
+              Set location
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+            </button>
+          </div>
         </section>
 
         <!-- Step 2: Location selection -->
         <section id="step-location" class="step">
-          <h2>Set Location</h2>
+          <div class="page-head">
+            <div class="eyebrow">Step 2 of 3</div>
+            <h2>Set location</h2>
+            <p class="hint">Pick the rack and U position. Device name is generated from this.</p>
+          </div>
 
           <div class="form-grid">
             <div class="form-group">
-              <label for="site-select">Datacenter</label>
-              <select id="site-select">
+              <label>Datacenter</label>
+              <div id="site-chips" class="chip-row">
+                <span class="chip-empty">Loading datacenters…</span>
+              </div>
+              <select id="site-select" class="hidden">
                 <option value="">Select datacenter...</option>
               </select>
             </div>
@@ -101,8 +144,11 @@
               </select>
             </div>
             <div class="form-group">
-              <label for="rack-select">Rack</label>
-              <select id="rack-select" disabled>
+              <label>Rack</label>
+              <div id="rack-chips" class="chip-row">
+                <span class="chip-empty">Pick a location first</span>
+              </div>
+              <select id="rack-select" class="hidden" disabled>
                 <option value="">Select rack...</option>
               </select>
             </div>
@@ -113,18 +159,24 @@
                 id="position-input"
                 min="1"
                 max="50"
-                placeholder="U position"
+                placeholder="U position (1–42)"
               />
             </div>
             <div class="form-group">
-              <label for="device-type-select">Device Type</label>
-              <select id="device-type-select">
+              <label>Device type</label>
+              <div id="device-type-chips" class="chip-row">
+                <span class="chip-empty">Loading…</span>
+              </div>
+              <select id="device-type-select" class="hidden">
                 <option value="">Select device type...</option>
               </select>
             </div>
             <div class="form-group">
-              <label for="device-role-select">Device Role</label>
-              <select id="device-role-select">
+              <label>Role</label>
+              <div id="device-role-chips" class="chip-row">
+                <span class="chip-empty">Loading…</span>
+              </div>
+              <select id="device-role-select" class="hidden">
                 <option value="">Select device role...</option>
               </select>
             </div>
@@ -143,16 +195,21 @@
           </div>
 
           <div class="btn-row">
-            <button id="back-to-scan" class="btn-secondary">Back</button>
-            <button id="next-to-review" class="btn-primary" disabled>
-              Next: Review
+            <button id="back-to-scan" class="btn-secondary" type="button">Back</button>
+            <button id="next-to-review" class="btn-primary" disabled type="button">
+              Review
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
             </button>
           </div>
         </section>
 
         <!-- Step 3: Review & submit -->
         <section id="step-review" class="step">
-          <h2>Review &amp; Submit</h2>
+          <div class="page-head">
+            <div class="eyebrow">Step 3 of 3</div>
+            <h2>Review &amp; register</h2>
+            <p class="hint" id="review-sub">Confirm details before registering.</p>
+          </div>
 
           <dl id="review-summary" class="review-list"></dl>
 
@@ -166,21 +223,25 @@
           <div id="submit-result" class="hidden"></div>
 
           <div class="btn-row">
-            <button id="back-to-location" class="btn-secondary">Back</button>
-            <button id="submit-register" class="btn-primary">
-              Register Server
+            <button id="back-to-location" class="btn-secondary" type="button">Back</button>
+            <button id="submit-register" class="btn-primary" type="button">
+              Register server
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
             </button>
           </div>
         </section>
 
         <!-- Bulk import panel -->
         <section id="panel-import" class="step">
-          <h2>Bulk Import Servers</h2>
-          <p class="hint">Upload a JSON file with server data to import existing servers into OpenBao, Kea, and Metal3.</p>
+          <div class="page-head">
+            <div class="eyebrow">Bulk tools</div>
+            <h2>Import servers</h2>
+            <p class="hint">Upload a JSON file to register servers in bulk. Used when migrating from legacy inventory.</p>
+          </div>
 
           <div class="import-upload">
-            <label for="import-file" class="btn-secondary import-file-label">
-              Choose JSON file...
+            <label for="import-file" class="import-file-label">
+              Choose JSON file
             </label>
             <input type="file" id="import-file" accept=".json" class="hidden" />
             <span id="import-file-name" class="import-file-name">No file selected</span>
@@ -188,7 +249,7 @@
 
           <div id="import-preview" class="hidden">
             <h3 id="import-count"></h3>
-            <div id="import-table-wrap" class="import-table-wrap">
+            <div class="import-table-wrap">
               <table class="import-table">
                 <thead>
                   <tr>
@@ -201,37 +262,54 @@
                 <tbody id="import-table-body"></tbody>
               </table>
             </div>
-            <button id="import-submit" class="btn-primary">Import Servers</button>
+            <button id="import-submit" class="btn-primary" type="button">Import servers</button>
           </div>
 
           <div id="import-progress" class="hidden">
             <div class="progress-bar">
               <div id="import-progress-fill" class="progress-fill"></div>
             </div>
-            <p id="import-progress-text" class="hint"></p>
+            <p id="import-progress-text"></p>
           </div>
 
           <div id="import-results" class="hidden"></div>
-
-          <button id="back-from-import" class="btn-secondary" style="margin-top:16px">Back</button>
         </section>
 
         <!-- Server list panel -->
         <section id="panel-servers" class="step">
-          <h2>Registered Servers</h2>
+          <div class="page-head">
+            <div class="eyebrow">Operations</div>
+            <h2>Registered servers</h2>
+          </div>
+
           <div class="filter-bar">
             <select id="filter-site"><option value="">All datacenters</option></select>
             <select id="filter-location"><option value="">All locations</option></select>
-            <select id="filter-device-type"><option value="">All device types</option></select>
+            <select id="filter-device-type"><option value="">All types</option></select>
             <select id="filter-device-role"><option value="">All roles</option></select>
           </div>
           <div id="server-count" class="server-count"></div>
           <div id="server-list" class="server-list">
             <p class="empty-state">No servers registered yet.</p>
           </div>
-          <button id="back-from-list" class="btn-secondary">Back</button>
         </section>
       </main>
+
+      <!-- Bottom tab bar -->
+      <nav id="tabbar" class="tabbar hidden">
+        <button id="tab-scan" class="tab on" type="button">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M21 7V5a2 2 0 0 0-2-2h-2M3 17v2a2 2 0 0 0 2 2h2M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M3 12h18"/></svg>
+          <span>Scan</span>
+        </button>
+        <button id="tab-servers" class="tab" type="button">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          <span>Servers</span>
+        </button>
+        <button id="tab-import" class="tab" type="button">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><path d="M12 3v14M7 8l5-5 5 5"/></svg>
+          <span>Import</span>
+        </button>
+      </nav>
     </div>
     <script type="module" src="/src/main.js"></script>
   </body>

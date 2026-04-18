@@ -1,5 +1,9 @@
 /**
  * DCaaS Server Onboarding PWA — main application logic.
+ *
+ * The UI is a mobile-first, field-ops flow: scan → location → review →
+ * register. Reference data (sites, racks, device types, roles, tenants) is
+ * pulled from the backend and rendered as chip rows for touch targets.
  */
 
 import {
@@ -14,7 +18,7 @@ import {
   getPrefixes,
   getTenants,
 } from "./services/api.js";
-import { startScanner, classifyBarcode, formatMac } from "./services/scanner.js";
+import { startScanner, formatMac } from "./services/scanner.js";
 
 // ── State ──────────────────────────────────────────────────────────────
 const state = {
@@ -30,7 +34,15 @@ const state = {
   tenant: "",
 };
 
-// Remember last-used location across scans
+const cache = {
+  sites: [],
+  locations: [],
+  racks: [],
+  deviceTypes: [],
+  deviceRoles: [],
+  tenants: [],
+};
+
 const remembered = {
   site: localStorage.getItem("last_site") || "",
   location: localStorage.getItem("last_location") || "",
@@ -39,11 +51,13 @@ const remembered = {
 };
 
 let activeScanner = null;
-let scanTarget = null; // "mac" | "password"
+let scanTarget = null;
+let locationDataLoaded = false;
 
 // ── DOM refs ───────────────────────────────────────────────────────────
 const $ = (sel) => document.querySelector(sel);
-const steps = {
+
+const screens = {
   login: $("#login-screen"),
   scan: $("#step-scan"),
   location: $("#step-location"),
@@ -52,15 +66,57 @@ const steps = {
   servers: $("#panel-servers"),
 };
 
+const appHeader = $("#app-header");
+const appMain = $("#app-main");
+const tabbar = $("#tabbar");
+
 // ── Navigation ─────────────────────────────────────────────────────────
 function showStep(name) {
-  Object.values(steps).forEach((el) => el.classList.remove("active"));
-  steps[name].classList.add("active");
+  Object.values(screens).forEach((el) => el.classList.remove("active"));
+  screens[name].classList.add("active");
+
+  const isLogin = name === "login";
+  appHeader.classList.toggle("hidden", isLogin);
+  appMain.classList.toggle("hidden", isLogin);
+  tabbar.classList.toggle("hidden", isLogin);
+
+  const flowSteps = new Set(["scan", "location", "review"]);
+  setActiveTab(flowSteps.has(name) ? "scan" : name);
 }
 
-// ── Step 1: Scanning ───────────────────────────────────────────────────
+function setActiveTab(key) {
+  document.querySelectorAll(".tabbar .tab").forEach((t) => t.classList.remove("on"));
+  const active = document.getElementById(`tab-${key}`);
+  if (active) active.classList.add("on");
+}
+
+// ── Active-location strip ─────────────────────────────────────────────
+const locCtx = $("#loc-ctx");
+const locCtxSite = $("#loc-ctx-site");
+const locCtxRack = $("#loc-ctx-rack");
+
+function updateLocationStrip() {
+  const siteName = cache.sites.find((s) => s.slug === state.site)?.name;
+  const site = siteName || state.site;
+  if (state.site || state.rack) {
+    locCtx.classList.remove("hidden");
+    locCtxSite.textContent = site || "—";
+    locCtxRack.textContent = state.rack || "—";
+  } else {
+    locCtx.classList.add("hidden");
+  }
+}
+
+$("#loc-ctx-edit").addEventListener("click", () => {
+  ensureLocationLoaded();
+  showStep("location");
+});
+
+// ── Scan fields ────────────────────────────────────────────────────────
 const macInput = $("#mac-input");
 const passwordInput = $("#password-input");
+const macField = $("#mac-field");
+const passwordField = $("#password-field");
 const cameraContainer = $("#camera-container");
 const cameraPreview = $("#camera-preview");
 
@@ -68,37 +124,36 @@ function updateScanNextButton() {
   $("#next-to-location").disabled = !(state.mac && state.password);
 }
 
+function setScanFieldDone(field, done) {
+  field.classList.toggle("done", done);
+}
+
 function resetScanFields() {
   state.mac = "";
   state.password = "";
   state.position = null;
   macInput.value = "";
-  macInput.classList.remove("valid");
+  setScanFieldDone(macField, false);
   $("#clear-mac").classList.add("hidden");
   passwordInput.value = "";
-  passwordInput.classList.remove("valid");
+  setScanFieldDone(passwordField, false);
   $("#clear-password").classList.add("hidden");
-  positionInput.value = "";
+  if (positionInput) positionInput.value = "";
   updateScanNextButton();
 }
 
 function handleScanResult(result) {
-  // When the user chose a specific field, only accept barcodes that match.
-  // This handles the case where both barcodes are visible in the camera —
-  // keep scanning until the right one is decoded.
-  if (scanTarget && scanTarget !== result.type) {
-    return; // wrong barcode, keep scanning
-  }
+  if (scanTarget && scanTarget !== result.type) return;
 
   if (result.type === "mac") {
     state.mac = result.value;
     macInput.value = formatMac(result.value);
-    macInput.classList.add("valid");
+    setScanFieldDone(macField, true);
     $("#clear-mac").classList.remove("hidden");
   } else {
     state.password = result.value;
     passwordInput.value = result.value;
-    passwordInput.classList.add("valid");
+    setScanFieldDone(passwordField, true);
     $("#clear-password").classList.remove("hidden");
   }
   stopCamera();
@@ -123,17 +178,16 @@ function dismissBanner() {
   $("#success-banner").classList.add("hidden");
 }
 
-// Manual input handlers
 macInput.addEventListener("input", () => {
   dismissBanner();
   const cleaned = macInput.value.replace(/[:\- ]/g, "");
   if (/^[0-9A-Fa-f]{12}$/.test(cleaned)) {
     state.mac = cleaned.toUpperCase();
-    macInput.classList.add("valid");
+    setScanFieldDone(macField, true);
     $("#clear-mac").classList.remove("hidden");
   } else {
     state.mac = "";
-    macInput.classList.remove("valid");
+    setScanFieldDone(macField, false);
   }
   updateScanNextButton();
 });
@@ -142,15 +196,14 @@ passwordInput.addEventListener("input", () => {
   dismissBanner();
   state.password = passwordInput.value;
   if (state.password) {
-    passwordInput.classList.add("valid");
+    setScanFieldDone(passwordField, true);
     $("#clear-password").classList.remove("hidden");
   } else {
-    passwordInput.classList.remove("valid");
+    setScanFieldDone(passwordField, false);
   }
   updateScanNextButton();
 });
 
-// Button handlers
 $("#scan-mac").addEventListener("click", () => openCamera("mac"));
 $("#scan-password").addEventListener("click", () => openCamera("password"));
 $("#cancel-scan").addEventListener("click", stopCamera);
@@ -158,7 +211,7 @@ $("#cancel-scan").addEventListener("click", stopCamera);
 $("#clear-mac").addEventListener("click", () => {
   state.mac = "";
   macInput.value = "";
-  macInput.classList.remove("valid");
+  setScanFieldDone(macField, false);
   $("#clear-mac").classList.add("hidden");
   updateScanNextButton();
 });
@@ -166,7 +219,7 @@ $("#clear-mac").addEventListener("click", () => {
 $("#clear-password").addEventListener("click", () => {
   state.password = "";
   passwordInput.value = "";
-  passwordInput.classList.remove("valid");
+  setScanFieldDone(passwordField, false);
   $("#clear-password").classList.add("hidden");
   updateScanNextButton();
 });
@@ -175,15 +228,42 @@ $("#toggle-password").addEventListener("click", () => {
   passwordInput.type = passwordInput.type === "password" ? "text" : "password";
 });
 
-// ── Step 2: Location ───────────────────────────────────────────────────
-const siteSelect = $("#site-select");
+// ── Location: chip helpers ─────────────────────────────────────────────
+function renderChips(container, items, { selected, onPick, labelFor, keyFor }) {
+  container.innerHTML = "";
+  if (!items.length) {
+    const span = document.createElement("span");
+    span.className = "chip-empty";
+    span.textContent = container.dataset.emptyLabel || "No options";
+    container.appendChild(span);
+    return;
+  }
+  for (const item of items) {
+    const key = keyFor(item);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "chip" + (key === selected ? " on" : "");
+    btn.textContent = labelFor(item);
+    btn.dataset.value = key;
+    btn.addEventListener("click", () => onPick(key, item));
+    container.appendChild(btn);
+  }
+}
+
+// ── Location: selectors ────────────────────────────────────────────────
+const siteChips = $("#site-chips");
 const locationSelect = $("#location-select");
-const rackSelect = $("#rack-select");
+const rackChips = $("#rack-chips");
 const positionInput = $("#position-input");
-const deviceTypeSelect = $("#device-type-select");
-const deviceRoleSelect = $("#device-role-select");
+const deviceTypeChips = $("#device-type-chips");
+const deviceRoleChips = $("#device-role-chips");
 const prefixSelect = $("#prefix-select");
 const tenantSelect = $("#tenant-select");
+
+rackChips.dataset.emptyLabel = "Pick a location first";
+siteChips.dataset.emptyLabel = "Loading datacenters…";
+deviceTypeChips.dataset.emptyLabel = "Loading…";
+deviceRoleChips.dataset.emptyLabel = "Loading…";
 
 function updateLocationNextButton() {
   const ready =
@@ -200,103 +280,160 @@ function updateLocationNextButton() {
 
 async function loadSites() {
   try {
-    const sites = await getSites();
-    siteSelect.innerHTML = '<option value="">Select datacenter...</option>';
-    sites.forEach((s) => {
-      const opt = document.createElement("option");
-      opt.value = s.slug;
-      opt.textContent = `${s.name} (${s.slug})`;
-      siteSelect.appendChild(opt);
-    });
-
-    if (remembered.site) {
-      siteSelect.value = remembered.site;
-      if (siteSelect.value) {
-        state.site = remembered.site;
-        await loadLocations(remembered.site);
-      }
+    cache.sites = await getSites();
+    renderSiteChips();
+    if (remembered.site && cache.sites.some((s) => s.slug === remembered.site)) {
+      await pickSite(remembered.site, { silent: true });
     }
   } catch (err) {
     console.error("Failed to load sites:", err);
+    siteChips.innerHTML = `<span class="chip-empty">Failed to load datacenters</span>`;
   }
 }
 
-async function loadLocations(site) {
+function renderSiteChips() {
+  renderChips(siteChips, cache.sites, {
+    selected: state.site,
+    keyFor: (s) => s.slug,
+    labelFor: (s) => s.name,
+    onPick: (slug) => pickSite(slug),
+  });
+}
+
+async function pickSite(slug, opts = {}) {
+  state.site = slug;
+  state.location = "";
+  state.rack = "";
+  state.position = null;
+  locationSelect.innerHTML = '<option value="">Select location...</option>';
+  locationSelect.disabled = true;
+  renderSiteChips();
+  rackChips.dataset.emptyLabel = "Pick a location first";
+  renderRackChips();
+  if (positionInput) positionInput.value = "";
+  localStorage.setItem("last_site", slug);
+  remembered.site = slug;
+  updateLocationStrip();
+  await loadLocations(slug, opts);
+  updateLocationNextButton();
+}
+
+async function loadLocations(site, opts = {}) {
   try {
     const locations = await getLocations(site);
+    cache.locations = locations;
     locationSelect.innerHTML = '<option value="">Select location...</option>';
-    locations.forEach((l) => {
+    for (const l of locations) {
       const opt = document.createElement("option");
       opt.value = l.slug;
       opt.textContent = l.name;
       locationSelect.appendChild(opt);
-    });
+    }
     locationSelect.disabled = false;
-
-    if (remembered.location) {
+    if (opts.silent && remembered.location &&
+        locations.some((l) => l.slug === remembered.location)) {
       locationSelect.value = remembered.location;
-      if (locationSelect.value) {
-        state.location = remembered.location;
-        await loadRacks(remembered.location);
-      }
+      await pickLocation(remembered.location, { silent: true });
     }
   } catch (err) {
     console.error("Failed to load locations:", err);
   }
 }
 
-async function loadRacks(location) {
-  try {
-    const racks = await getRacks(location);
-    rackSelect.innerHTML = '<option value="">Select rack...</option>';
-    racks.forEach((r) => {
-      const opt = document.createElement("option");
-      opt.value = r.name;
-      opt.textContent = r.name;
-      rackSelect.appendChild(opt);
-    });
-    rackSelect.disabled = false;
+async function pickLocation(slug, opts = {}) {
+  state.location = slug;
+  state.rack = "";
+  state.position = null;
+  localStorage.setItem("last_location", slug);
+  remembered.location = slug;
+  updateLocationStrip();
+  if (slug) await loadRacks(slug, opts);
+  updateLocationNextButton();
+}
 
-    if (remembered.rack) {
-      rackSelect.value = remembered.rack;
-      if (rackSelect.value) {
-        state.rack = remembered.rack;
-      }
+async function loadRacks(location, opts = {}) {
+  try {
+    cache.racks = await getRacks(location);
+    rackChips.dataset.emptyLabel = cache.racks.length ? "" : "No racks in this location";
+    renderRackChips();
+    if (opts.silent && remembered.rack &&
+        cache.racks.some((r) => r.name === remembered.rack)) {
+      pickRack(remembered.rack);
     }
   } catch (err) {
     console.error("Failed to load racks:", err);
   }
 }
 
-async function loadDeviceTypes() {
+function renderRackChips() {
+  renderChips(rackChips, cache.racks, {
+    selected: state.rack,
+    keyFor: (r) => r.name,
+    labelFor: (r) => r.name,
+    onPick: (name) => pickRack(name),
+  });
+}
+
+function pickRack(name) {
+  state.rack = name;
+  state.position = null;
+  if (positionInput) positionInput.value = "";
+  localStorage.setItem("last_rack", name);
+  remembered.rack = name;
+  renderRackChips();
+  updateLocationStrip();
+  updateLocationNextButton();
+}
+
+function pickDeviceType(slug) {
+  state.deviceType = slug;
+  renderChips(deviceTypeChips, cache.deviceTypes, {
+    selected: slug,
+    keyFor: (t) => t.slug,
+    labelFor: (t) => `${t.manufacturer} ${t.model}`,
+    onPick: pickDeviceType,
+  });
+  updateLocationNextButton();
+}
+
+function pickDeviceRole(slug) {
+  state.deviceRole = slug;
+  renderChips(deviceRoleChips, cache.deviceRoles, {
+    selected: slug,
+    keyFor: (r) => r.slug,
+    labelFor: (r) => r.name,
+    onPick: pickDeviceRole,
+  });
+  updateLocationNextButton();
+}
+
+async function loadDeviceTypesChips() {
   try {
-    const types = await getDeviceTypes();
-    deviceTypeSelect.innerHTML =
-      '<option value="">Select device type...</option>';
-    types.forEach((t) => {
-      const opt = document.createElement("option");
-      opt.value = t.slug;
-      opt.textContent = `${t.manufacturer} ${t.model}`;
-      deviceTypeSelect.appendChild(opt);
+    cache.deviceTypes = await getDeviceTypes();
+    renderChips(deviceTypeChips, cache.deviceTypes, {
+      selected: state.deviceType,
+      keyFor: (t) => t.slug,
+      labelFor: (t) => `${t.manufacturer} ${t.model}`,
+      onPick: pickDeviceType,
     });
   } catch (err) {
     console.error("Failed to load device types:", err);
+    deviceTypeChips.innerHTML = `<span class="chip-empty">Failed to load device types</span>`;
   }
 }
 
-async function loadDeviceRoles() {
+async function loadDeviceRolesChips() {
   try {
-    const roles = await getDeviceRoles();
-    deviceRoleSelect.innerHTML =
-      '<option value="">Select device role...</option>';
-    roles.forEach((r) => {
-      const opt = document.createElement("option");
-      opt.value = r.slug;
-      opt.textContent = r.name;
-      deviceRoleSelect.appendChild(opt);
+    cache.deviceRoles = await getDeviceRoles();
+    renderChips(deviceRoleChips, cache.deviceRoles, {
+      selected: state.deviceRole,
+      keyFor: (r) => r.slug,
+      labelFor: (r) => r.name,
+      onPick: pickDeviceRole,
     });
   } catch (err) {
     console.error("Failed to load device roles:", err);
+    deviceRoleChips.innerHTML = `<span class="chip-empty">Failed to load roles</span>`;
   }
 }
 
@@ -304,12 +441,12 @@ async function loadPrefixes() {
   try {
     const prefixes = await getPrefixes();
     prefixSelect.innerHTML = '<option value="">Select BMC prefix...</option>';
-    prefixes.forEach((p) => {
+    for (const p of prefixes) {
       const opt = document.createElement("option");
       opt.value = p.prefix;
       opt.textContent = `${p.prefix} — ${p.description}`;
       prefixSelect.appendChild(opt);
-    });
+    }
   } catch (err) {
     console.error("Failed to load prefixes:", err);
   }
@@ -317,78 +454,44 @@ async function loadPrefixes() {
 
 async function loadTenants() {
   try {
-    const tenants = await getTenants();
+    cache.tenants = await getTenants();
     tenantSelect.innerHTML = '<option value="">Select tenant...</option>';
-    tenants.forEach((t) => {
+    for (const t of cache.tenants) {
       const opt = document.createElement("option");
       opt.value = t.slug;
       opt.textContent = t.name;
       tenantSelect.appendChild(opt);
-    });
-
-    if (remembered.tenant) {
+    }
+    if (remembered.tenant && cache.tenants.some((t) => t.slug === remembered.tenant)) {
       tenantSelect.value = remembered.tenant;
-      if (tenantSelect.value) {
-        state.tenant = remembered.tenant;
-      }
+      state.tenant = remembered.tenant;
     }
   } catch (err) {
     console.error("Failed to load tenants:", err);
   }
 }
 
-siteSelect.addEventListener("change", async () => {
-  state.site = siteSelect.value;
-  state.location = "";
-  state.rack = "";
-  locationSelect.innerHTML = '<option value="">Select location...</option>';
-  locationSelect.disabled = true;
-  rackSelect.innerHTML = '<option value="">Select rack...</option>';
-  rackSelect.disabled = true;
-
-  if (state.site) {
-    localStorage.setItem("last_site", state.site);
-    remembered.site = state.site;
-    await loadLocations(state.site);
-  }
+async function ensureLocationLoaded() {
+  if (locationDataLoaded) return;
+  locationDataLoaded = true;
+  await Promise.all([
+    loadSites(),
+    loadDeviceTypesChips(),
+    loadDeviceRolesChips(),
+    loadPrefixes(),
+    loadTenants(),
+  ]);
   updateLocationNextButton();
-});
+}
 
 locationSelect.addEventListener("change", async () => {
-  state.location = locationSelect.value;
-  state.rack = "";
-  rackSelect.innerHTML = '<option value="">Select rack...</option>';
-  rackSelect.disabled = true;
-
-  if (state.location) {
-    localStorage.setItem("last_location", state.location);
-    remembered.location = state.location;
-    await loadRacks(state.location);
-  }
-  updateLocationNextButton();
-});
-
-rackSelect.addEventListener("change", () => {
-  state.rack = rackSelect.value;
-  if (state.rack) {
-    localStorage.setItem("last_rack", state.rack);
-    remembered.rack = state.rack;
-  }
-  updateLocationNextButton();
+  const slug = locationSelect.value;
+  await pickLocation(slug);
 });
 
 positionInput.addEventListener("input", () => {
   state.position = positionInput.value ? parseInt(positionInput.value, 10) : null;
-  updateLocationNextButton();
-});
-
-deviceTypeSelect.addEventListener("change", () => {
-  state.deviceType = deviceTypeSelect.value;
-  updateLocationNextButton();
-});
-
-deviceRoleSelect.addEventListener("change", () => {
-  state.deviceRole = deviceRoleSelect.value;
+  updateLocationStrip();
   updateLocationNextButton();
 });
 
@@ -409,32 +512,58 @@ tenantSelect.addEventListener("change", () => {
 // ── Step 3: Review & Submit ────────────────────────────────────────────
 function buildReview() {
   const dl = $("#review-summary");
-  const items = [
-    ["BMC MAC", formatMac(state.mac)],
-    ["BMC Password", "\u2022".repeat(state.password.length)],
-    ["Datacenter", state.site],
-    ["Location", state.location],
-    ["Rack", state.rack],
-    ["U Position", state.position],
-    ["Device Type", state.deviceType],
-    ["Device Role", state.deviceRole],
-    ["BMC Prefix", state.bmcPrefix],
-    ["Tenant", state.tenant],
-    ["Device Name", `${state.location}-${state.rack.toLowerCase()}u${state.position}`],
+  const siteName = cache.sites.find((s) => s.slug === state.site)?.name || state.site;
+  const locName = cache.locations.find((l) => l.slug === state.location)?.name || state.location;
+  const dtype = cache.deviceTypes.find((t) => t.slug === state.deviceType);
+  const role = cache.deviceRoles.find((r) => r.slug === state.deviceRole);
+  const deviceName =
+    state.site && state.rack && state.position
+      ? `${state.location || state.site}-${state.rack.toLowerCase()}u${String(state.position).padStart(2, "0")}`
+      : "—";
+
+  const rows = [
+    { k: "Device name", v: deviceName, derived: true },
+    { k: "BMC MAC", v: formatMac(state.mac) },
+    { k: "BMC Password", v: "\u2022".repeat(Math.min(state.password.length, 12)) },
+    { k: "Location", v: `${siteName} · ${locName}` },
+    { k: "Rack · U", v: `${state.rack} · U${state.position}` },
+    { k: "Device", v: `${dtype ? dtype.manufacturer + " " + dtype.model : ""} · ${role ? role.name : ""}` },
+    { k: "BMC Prefix", v: state.bmcPrefix },
+    { k: "Tenant", v: state.tenant, derived: true },
   ];
 
-  dl.innerHTML = items
-    .map(([label, val]) => `<dt>${label}</dt><dd>${val}</dd>`)
+  dl.innerHTML = rows
+    .map(
+      (r) =>
+        `<div class="review-row"><dt>${r.k}</dt><dd class="${r.derived ? "derived" : ""}">${r.v || "—"}</dd></div>`
+    )
     .join("");
 }
 
 const WORKFLOW_STEPS = [
-  { key: "netbox_device_created", label: "Create device in Netbox" },
-  { key: "netbox_interface_created", label: "Create BMC interface" },
-  { key: "secret_stored", label: "Store credentials in OpenBao" },
-  { key: "bmc_ip_assigned", label: "Assign BMC IP via Kea DHCP" },
-  { key: "ironic_node_created", label: "Create Metal3 BareMetalHost" },
+  { key: "netbox_device_created", label: "Create device", target: "Netbox" },
+  { key: "netbox_interface_created", label: "Create BMC interface", target: "Netbox" },
+  { key: "secret_stored", label: "Store credentials", target: "OpenBao" },
+  { key: "bmc_ip_assigned", label: "Assign BMC IP", target: "Kea DHCP" },
+  { key: "ironic_node_created", label: "Create BareMetalHost", target: "Metal3" },
 ];
+
+function renderStepList(stepList, statuses) {
+  stepList.innerHTML = WORKFLOW_STEPS.map((s) => {
+    const st = statuses[s.key] || "pending";
+    const dotContent =
+      st === "done"
+        ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>'
+        : st === "fail"
+        ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M6 18L18 6"/></svg>'
+        : "";
+    return `<li class="${st}" data-key="${s.key}">
+      <span class="dot">${dotContent}</span>
+      <span class="lbl">${s.label}</span>
+      <span class="target">${s.target}</span>
+    </li>`;
+  }).join("");
+}
 
 async function submitRegistration() {
   const submitBtn = $("#submit-register");
@@ -447,10 +576,8 @@ async function submitRegistration() {
   resultDiv.classList.add("hidden");
   progress.classList.remove("hidden");
 
-  // Build step indicators
-  stepList.innerHTML = WORKFLOW_STEPS.map(
-    (s) => `<li class="pending" data-key="${s.key}">&#x25CB; ${s.label}</li>`
-  ).join("");
+  const statuses = Object.fromEntries(WORKFLOW_STEPS.map((s) => [s.key, "pending"]));
+  renderStepList(stepList, statuses);
 
   try {
     const result = await registerServer({
@@ -466,39 +593,30 @@ async function submitRegistration() {
       tenant: state.tenant,
     });
 
-    // Update step indicators from response
     let completed = 0;
-    WORKFLOW_STEPS.forEach((s) => {
-      const li = stepList.querySelector(`[data-key="${s.key}"]`);
-      if (result.steps[s.key]) {
-        li.className = "done";
-        li.innerHTML = `&#x2714; ${s.label}`;
-        completed++;
-      } else {
-        li.className = "fail";
-        li.innerHTML = `&#x2718; ${s.label}`;
-      }
-    });
+    for (const s of WORKFLOW_STEPS) {
+      statuses[s.key] = result.steps[s.key] ? "done" : "fail";
+      if (result.steps[s.key]) completed++;
+    }
+    renderStepList(stepList, statuses);
     progressFill.style.width = `${(completed / WORKFLOW_STEPS.length) * 100}%`;
 
-    // Success — redirect back to scan with a banner
     resetScanFields();
     const banner = $("#success-banner");
     banner.innerHTML = `
-      &#x2714; Registered <code>${result.device_name}</code>
+      <div>&#x2714; Registered <code>${result.device_name}</code></div>
       <div class="banner-details">
-        BMC IP: ${result.bmc_ip || "N/A"} &middot; Netbox ID: ${result.netbox_id || "N/A"}
+        BMC IP ${result.bmc_ip || "N/A"} · Netbox #${result.netbox_id || "N/A"}
       </div>
     `;
     banner.classList.remove("hidden");
     showStep("scan");
-    return;
   } catch (err) {
     resultDiv.classList.remove("hidden");
     resultDiv.className = "result-error";
-    resultDiv.innerHTML = `<strong>Registration failed</strong><br />${err.message}`;
+    resultDiv.innerHTML = `<strong>Registration failed</strong>${err.message}`;
     progressFill.style.width = "100%";
-    progressFill.style.background = "var(--error)";
+    progressFill.style.background = "var(--err)";
   } finally {
     submitBtn.disabled = false;
   }
@@ -513,22 +631,26 @@ const filterDeviceType = $("#filter-device-type");
 const filterDeviceRole = $("#filter-device-role");
 
 function populateFilterOptions() {
-  const sites = [...new Set(allServers.map((s) => s.site).filter(Boolean))].sort();
-  const locations = [...new Set(allServers.map((s) => s.location).filter(Boolean))].sort();
-  const types = [...new Set(allServers.map((s) => s.device_type).filter(Boolean))].sort();
+  const uniq = (key) => [...new Set(allServers.map((s) => s[key]).filter(Boolean))].sort();
+  const sites = uniq("site");
+  const locations = uniq("location");
+  const types = uniq("device_type");
+  const roles = uniq("device_role");
 
-  filterSite.innerHTML = '<option value="">All datacenters</option>' +
+  filterSite.innerHTML =
+    '<option value="">All datacenters</option>' +
     sites.map((v) => `<option value="${v}">${v}</option>`).join("");
-  filterLocation.innerHTML = '<option value="">All locations</option>' +
+  filterLocation.innerHTML =
+    '<option value="">All locations</option>' +
     locations.map((v) => `<option value="${v}">${v}</option>`).join("");
-  filterDeviceType.innerHTML = '<option value="">All device types</option>' +
+  filterDeviceType.innerHTML =
+    '<option value="">All types</option>' +
     types.map((v) => `<option value="${v}">${v}</option>`).join("");
 
-  const roles = [...new Set(allServers.map((s) => s.device_role).filter(Boolean))].sort();
   const currentRole = filterDeviceRole.value;
-  filterDeviceRole.innerHTML = '<option value="">All roles</option>' +
+  filterDeviceRole.innerHTML =
+    '<option value="">All roles</option>' +
     roles.map((v) => `<option value="${v}">${v}</option>`).join("");
-  // Default to "Physical server" on first load
   if (!currentRole && roles.includes("Physical server")) {
     filterDeviceRole.value = "Physical server";
   } else {
@@ -545,7 +667,11 @@ function renderServerList() {
   const rf = filterDeviceRole.value;
 
   const filtered = allServers.filter(
-    (s) => (!sf || s.site === sf) && (!lf || s.location === lf) && (!tf || s.device_type === tf) && (!rf || s.device_role === rf)
+    (s) =>
+      (!sf || s.site === sf) &&
+      (!lf || s.location === lf) &&
+      (!tf || s.device_type === tf) &&
+      (!rf || s.device_role === rf)
   );
 
   countEl.textContent = `${filtered.length} of ${allServers.length} servers`;
@@ -555,16 +681,19 @@ function renderServerList() {
     return;
   }
   container.innerHTML = filtered
-    .map(
-      (s) => `
-    <div class="server-card">
-      <h3>${s.name}</h3>
-      <span class="status-badge ${s.status}">${s.status}</span>
-      <p class="meta">${s.location} / ${s.rack} / U${s.position || "?"}
-        &mdash; ${s.device_role}
-        &mdash; ${s.created ? new Date(s.created).toLocaleDateString() : ""}</p>
-    </div>`
-    )
+    .map((s) => {
+      const parts = [];
+      if (s.rack || s.position) parts.push(`<span class="dim">rack</span> ${s.rack || "?"}·U${s.position || "?"}`);
+      if (s.device_role) parts.push(`<span class="dim">role</span> ${s.device_role}`);
+      if (s.bmc_ip) parts.push(`<span class="dim">ip</span> ${s.bmc_ip}`);
+      if (s.created) parts.push(`<span class="dim">added</span> ${new Date(s.created).toLocaleDateString()}`);
+      return `
+      <div class="server-card">
+        <h3>${s.name}</h3>
+        <span class="status-badge ${s.status}">${s.status}</span>
+        <p class="meta">${parts.join(" · ")}</p>
+      </div>`;
+    })
     .join("");
 }
 
@@ -628,7 +757,6 @@ importFileInput.addEventListener("change", () => {
       if (!Array.isArray(parsed) || parsed.length === 0) {
         throw new Error("File must contain a non-empty JSON array");
       }
-      // Validate required fields
       for (const [i, item] of parsed.entries()) {
         if (!item.device_name || !item.bmc_mac || !item.bmc_password) {
           throw new Error(
@@ -640,7 +768,8 @@ importFileInput.addEventListener("change", () => {
       importCount.textContent = `${parsed.length} server${parsed.length !== 1 ? "s" : ""} to import`;
       importTableBody.innerHTML = parsed
         .map((s) => {
-          const hasNetbox = s.site && s.location && s.rack && s.position != null && s.device_type && s.device_role;
+          const hasNetbox =
+            s.site && s.location && s.rack && s.position != null && s.device_type && s.device_role;
           return `<tr>
             <td>${s.device_name}</td>
             <td><code>${formatMacForDisplay(s.bmc_mac)}</code></td>
@@ -655,7 +784,7 @@ importFileInput.addEventListener("change", () => {
       importPreview.classList.add("hidden");
       importResults.classList.remove("hidden");
       importResults.className = "result-error";
-      importResults.innerHTML = `<strong>Invalid file</strong><br />${err.message}`;
+      importResults.innerHTML = `<strong>Invalid file</strong>${err.message}`;
     }
   };
   reader.readAsText(file);
@@ -667,11 +796,11 @@ function renderImportResult(r) {
   const icon = isOk ? "\u2714" : "\u2718";
 
   const stepLabels = [
-    ["netbox_device_created", "Netbox device"],
-    ["netbox_interface_created", "Netbox interface"],
-    ["secret_stored", "OpenBao secret"],
-    ["bmc_ip_assigned", "Kea DHCP"],
-    ["ironic_node_created", "Metal3 BMH"],
+    ["netbox_device_created", "NB"],
+    ["netbox_interface_created", "IF"],
+    ["secret_stored", "OB"],
+    ["bmc_ip_assigned", "KE"],
+    ["ironic_node_created", "M3"],
   ];
   const stepBadges = stepLabels
     .map(([key, label]) => {
@@ -680,12 +809,10 @@ function renderImportResult(r) {
     })
     .join(" ");
 
-  const warningHtml = r.warnings.length
+  const warningHtml = r.warnings?.length
     ? `<div class="result-warnings">${r.warnings.join("<br/>")}</div>`
     : "";
-  const errorHtml = r.error
-    ? `<div class="result-error-text">${r.error}</div>`
-    : "";
+  const errorHtml = r.error ? `<div class="result-error-text">${r.error}</div>` : "";
 
   return `<div class="${cssClass}">
     <strong>${icon} ${r.device_name}</strong>
@@ -697,19 +824,17 @@ function renderImportResult(r) {
 
 function importShowDone(ok, failed) {
   importProgressFill.style.width = "100%";
-  if (failed > 0) {
-    importProgressFill.style.background = "var(--warning)";
-  }
-  importProgressText.textContent = `Done: ${ok} succeeded, ${failed} failed`;
+  if (failed > 0) importProgressFill.style.background = "var(--warn)";
+  importProgressText.textContent = `Done · ${ok} succeeded, ${failed} failed`;
   importSubmitBtn.disabled = false;
 }
 
 function importShowError(message) {
   importProgressFill.style.width = "100%";
-  importProgressFill.style.background = "var(--error)";
+  importProgressFill.style.background = "var(--err)";
   importProgressText.textContent = "";
   importResults.className = "result-error";
-  importResults.innerHTML = `<strong>Import failed</strong><br />${message}`;
+  importResults.innerHTML = `<strong>Import failed</strong>${message}`;
   importSubmitBtn.disabled = false;
 }
 
@@ -722,9 +847,7 @@ function importViaWebSocket(data) {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   const ws = new WebSocket(`${proto}//${location.host}/api/v1/servers/import/ws`);
 
-  ws.onopen = () => {
-    ws.send(JSON.stringify(data));
-  };
+  ws.onopen = () => ws.send(JSON.stringify(data));
 
   ws.onmessage = (event) => {
     const msg = JSON.parse(event.data);
@@ -744,7 +867,7 @@ function importViaWebSocket(data) {
     else failed++;
 
     importProgressFill.style.width = `${(received / total) * 100}%`;
-    importProgressText.textContent = `${received} / ${total} — ${ok} ok, ${failed} failed`;
+    importProgressText.textContent = `${received} / ${total} · ${ok} ok, ${failed} failed`;
     importResults.insertAdjacentHTML("beforeend", renderImportResult(msg));
   };
 
@@ -753,15 +876,11 @@ function importViaWebSocket(data) {
       importShowError("WebSocket connection lost");
       return;
     }
-    // WebSocket never connected — fall back to REST
     console.warn("WebSocket failed, falling back to REST import");
     importViaREST(data);
   };
 
-  ws.onclose = (event) => {
-    if (!event.wasClean && received === 0) {
-      // Connection rejected — fall back handled by onerror
-    }
+  ws.onclose = () => {
     importSubmitBtn.disabled = false;
   };
 }
@@ -776,7 +895,7 @@ async function importViaREST(data) {
       if (r.status === "ok") ok++;
       else failed++;
       importProgressFill.style.width = `${((i + 1) / total) * 100}%`;
-      importProgressText.textContent = `${i + 1} / ${total} — ${ok} ok, ${failed} failed`;
+      importProgressText.textContent = `${i + 1} / ${total} · ${ok} ok, ${failed} failed`;
       importResults.insertAdjacentHTML("beforeend", renderImportResult(r));
     });
     importShowDone(ok, failed);
@@ -795,7 +914,7 @@ importSubmitBtn.addEventListener("click", () => {
   importResults.innerHTML = "";
   importProgressFill.style.width = "0%";
   importProgressFill.style.background = "";
-  importProgressText.textContent = `Importing ${importData.length} servers...`;
+  importProgressText.textContent = `Importing ${importData.length} servers…`;
 
   importViaWebSocket(importData);
 });
@@ -803,18 +922,13 @@ importSubmitBtn.addEventListener("click", () => {
 // ── Navigation wiring ──────────────────────────────────────────────────
 $("#next-to-location").addEventListener("click", () => {
   showStep("location");
-  loadSites();
-  loadDeviceTypes();
-  loadDeviceRoles();
-  loadPrefixes();
-  loadTenants();
+  ensureLocationLoaded();
 });
 
 $("#back-to-scan").addEventListener("click", () => showStep("scan"));
 
 $("#next-to-review").addEventListener("click", () => {
   buildReview();
-  // Reset submit state
   $("#submit-progress").classList.add("hidden");
   $("#submit-result").classList.add("hidden");
   $("#submit-register").disabled = false;
@@ -825,35 +939,16 @@ $("#back-to-location").addEventListener("click", () => showStep("location"));
 
 $("#submit-register").addEventListener("click", submitRegistration);
 
-// ── Nav menu ──
-const navMenu = $("#nav-menu");
-
-$("#nav-menu-toggle").addEventListener("click", () => {
-  navMenu.classList.toggle("hidden");
-});
-
-// Close menu when clicking outside
-document.addEventListener("click", (e) => {
-  if (!e.target.closest(".nav-menu-wrap")) {
-    navMenu.classList.add("hidden");
-  }
-});
-
-$("#nav-list").addEventListener("click", () => {
-  navMenu.classList.add("hidden");
+// Tab bar
+$("#tab-scan").addEventListener("click", () => showStep("scan"));
+$("#tab-servers").addEventListener("click", () => {
   loadServerList();
   showStep("servers");
 });
-
-$("#back-from-list").addEventListener("click", () => showStep("scan"));
-
-$("#nav-import").addEventListener("click", () => {
-  navMenu.classList.add("hidden");
+$("#tab-import").addEventListener("click", () => {
   resetImportPanel();
   showStep("import");
 });
-
-$("#back-from-import").addEventListener("click", () => showStep("scan"));
 
 // ── Auth ────────────────────────────────────────────────────────────────
 const userNameEl = $("#user-name");
@@ -872,6 +967,7 @@ async function checkAuth() {
       userNameEl.textContent = user.name || user.sub || "";
       userNameEl.classList.remove("hidden");
       logoutBtn.classList.remove("hidden");
+      updateLocationStrip();
       showStep("scan");
       return;
     }
@@ -881,5 +977,4 @@ async function checkAuth() {
   showStep("login");
 }
 
-// ── Init ───────────────────────────────────────────────────────────────
 checkAuth();
